@@ -28,6 +28,7 @@ const SimulationSnapshotBuilder = preload("res://scripts/core/simulation/simulat
 const SimulationSnapshotCodec = preload("res://scripts/core/simulation/simulation_snapshot_codec.gd")
 const CombatCommandHandler = preload("res://scripts/core/simulation/commands/combat_command_handler.gd")
 const CraftingCommandHandler = preload("res://scripts/core/simulation/commands/crafting_command_handler.gd")
+const MovementCommandHandler = preload("res://scripts/core/simulation/commands/movement_command_handler.gd")
 const PlayerCommandRouter = preload("res://scripts/core/simulation/commands/player_command_router.gd")
 const CommandResultService = preload("res://scripts/core/simulation/services/command_result_service.gd")
 const CraftingService = preload("res://scripts/core/simulation/services/crafting_service.gd")
@@ -145,6 +146,7 @@ var _inventory_entries := InventoryEntries.new()
 var _item_use_runner := ItemUseRunner.new()
 var _combat_command_handler := CombatCommandHandler.new()
 var _crafting_command_handler := CraftingCommandHandler.new()
+var _movement_command_handler := MovementCommandHandler.new()
 var _player_command_router := PlayerCommandRouter.new()
 var _command_result_service := CommandResultService.new()
 var _crafting_service := CraftingService.new()
@@ -416,32 +418,7 @@ func move_actor_to(actor_id: int, target_position: Dictionary, topology: Diction
 
 
 func preview_move(actor_id: int, target_position: Dictionary, topology: Dictionary) -> Dictionary:
-	var actor: RefCounted = actor_registry.get_actor(actor_id)
-	if actor == null:
-		return {"success": false, "reason": "unknown_actor"}
-	var goal: RefCounted = GridCoord.from_dictionary(target_position)
-	var plan: Dictionary = _pathfinder.find_path(actor.grid_position, goal, topology, _occupied_actor_cells(actor.actor_id))
-	var steps: int = int(plan.get("steps", 0))
-	var cost: float = float(max(0, steps))
-	var affordable_steps: int = min(steps, int(floor(actor.ap)))
-	var preview: Dictionary = {
-		"success": bool(plan.get("success", false)),
-		"target_position": goal.to_dictionary(),
-		"reason": str(plan.get("reason", "")),
-		"reachable": bool(plan.get("success", false)),
-		"steps": steps,
-		"path": _array_or_empty(plan.get("path", [])).duplicate(true),
-		"pathfinding_time_ms": float(plan.get("pathfinding_time_ms", 0.0)),
-		"visited_cell_count": int(plan.get("visited_cell_count", 0)),
-		"ap_cost": cost,
-		"ap_available": actor.ap,
-		"ap_affordable": actor.ap >= cost,
-		"affordable_steps": affordable_steps,
-		"requires_pending": actor.ap < cost,
-		"pending_steps": max(0, steps - affordable_steps),
-	}
-	_copy_failure_context(plan, preview)
-	return preview
+	return _movement_command_handler.preview_move(self, actor_id, target_position, topology)
 
 
 func equip_item(actor_id: int, item_id: String, target_slot: String, item_library: Dictionary) -> Dictionary:
@@ -755,214 +732,23 @@ func _merge_auto_turn_final_result(result: Dictionary, auto_turn: Dictionary) ->
 
 
 func _submit_move_command(actor: RefCounted, command: Dictionary) -> Dictionary:
-	var topology: Dictionary = _dictionary_or_empty(command.get("topology", {}))
-	if topology.is_empty():
-		return {"success": false, "reason": "move_topology_missing"}
-	var target_position: Dictionary = _dictionary_or_empty(command.get("target_position", command.get("grid", {})))
-	var goal: RefCounted = GridCoord.from_dictionary(target_position)
-	var movement_topology: Dictionary = _topology_with_auto_open_doors(actor.actor_id, topology)
-	var plan: Dictionary = _pathfinder.find_path(actor.grid_position, goal, movement_topology, _occupied_actor_cells(actor.actor_id))
-	if not bool(plan.get("success", false)):
-		return plan
-	var steps: int = int(plan.get("steps", 0))
-	var cost: float = float(max(0, steps))
-	if actor.ap < cost:
-		pending_movement = {
-			"actor_id": actor.actor_id,
-			"target_position": goal.to_dictionary(),
-			"path": _array_or_empty(plan.get("path", [])).duplicate(true),
-			"required_ap": cost,
-			"available_ap": actor.ap,
-			"remaining_steps": steps,
-		}
-		_emit("movement_queued", pending_movement.duplicate(true))
-		var partial_move: Dictionary = _advance_pending_movement(actor, topology)
-		if not bool(partial_move.get("success", false)):
-			return partial_move
-		if int(partial_move.get("steps", 0)) > 0:
-			partial_move["reason"] = "movement_pending"
-			partial_move["pending_movement"] = pending_movement.duplicate(true)
-			return partial_move
-		return {
-			"success": false,
-			"reason": "ap_insufficient_movement_queued",
-			"pending_movement": pending_movement.duplicate(true),
-		}
-
-	var from: Dictionary = actor.grid_position.to_dictionary()
-	_spend_ap(actor, cost, "move")
-	actor.grid_position = goal
-	for step in _array_or_empty(plan.get("path", [])).slice(1):
-		_auto_open_door_for_step(actor.actor_id, _dictionary_or_empty(step), topology)
-		_emit("movement_step", {
-			"actor_id": actor.actor_id,
-			"to": _dictionary_or_empty(step),
-		})
-	_emit("actor_moved", {
-		"actor_id": actor.actor_id,
-		"from": from,
-		"to": goal.to_dictionary(),
-		"steps": steps,
-	})
-	pending_movement.clear()
-	return {
-		"success": true,
-		"kind": "move",
-		"actor_id": actor.actor_id,
-		"to": goal.to_dictionary(),
-		"path": plan.get("path", []),
-		"steps": steps,
-		"ap_remaining": actor.ap,
-	}
+	return _movement_command_handler.submit_move_command(self, actor, command)
 
 
 func begin_move(actor_id: int, target_position: Dictionary, topology: Dictionary) -> Dictionary:
-	var actor: RefCounted = actor_registry.get_actor(actor_id)
-	if actor == null:
-		return {"success": false, "reason": "unknown_actor"}
-	if not actor.turn_open:
-		return {"success": false, "reason": "turn_closed", "turn_state": turn_state.duplicate(true)}
-	if topology.is_empty():
-		return {"success": false, "reason": "move_topology_missing"}
-	var goal: RefCounted = GridCoord.from_dictionary(target_position)
-	var movement_topology: Dictionary = _topology_with_auto_open_doors(actor.actor_id, topology)
-	var plan: Dictionary = _pathfinder.find_path(actor.grid_position, goal, movement_topology, _occupied_actor_cells(actor.actor_id))
-	if not bool(plan.get("success", false)):
-		return plan
-	var path: Array = _array_or_empty(plan.get("path", [])).duplicate(true)
-	pending_movement = {
-		"actor_id": actor.actor_id,
-		"target_position": goal.to_dictionary(),
-		"path": path,
-		"required_ap": float(max(0, int(plan.get("steps", 0)))),
-		"available_ap": actor.ap,
-		"remaining_steps": int(plan.get("steps", 0)),
-		"step_mode": true,
-	}
-	_emit("movement_started", pending_movement.duplicate(true))
-	return {
-		"success": true,
-		"kind": "move",
-		"actor_id": actor.actor_id,
-		"target_position": goal.to_dictionary(),
-		"path": path,
-		"steps": int(plan.get("steps", 0)),
-		"ap": actor.ap,
-		"pending_movement": pending_movement.duplicate(true),
-	}
+	return _movement_command_handler.begin_move(self, actor_id, target_position, topology)
 
 
 func step_move(actor_id: int, topology: Dictionary) -> Dictionary:
-	var event_start_index: int = events.size()
-	var actor: RefCounted = actor_registry.get_actor(actor_id)
-	if actor == null:
-		return {"success": false, "reason": "unknown_actor"}
-	if pending_movement.is_empty():
-		return {
-			"success": true,
-			"kind": "move",
-			"actor_id": actor_id,
-			"completed": true,
-			"reason": "no_pending_movement",
-			"ap_remaining": actor.ap,
-		}
-	if int(pending_movement.get("actor_id", actor_id)) != actor_id:
-		return {"success": false, "reason": "pending_movement_actor_mismatch", "pending_movement": pending_movement.duplicate(true)}
-	if actor.ap < 1.0:
-		pending_movement["available_ap"] = actor.ap
-		return {
-			"success": true,
-			"kind": "move",
-			"actor_id": actor_id,
-			"completed": true,
-			"pending": true,
-			"reason": "ap_insufficient_movement_pending",
-			"pending_movement": pending_movement.duplicate(true),
-			"ap_remaining": actor.ap,
-			"events": _events_since(event_start_index),
-		}
-	var path: Array = _array_or_empty(pending_movement.get("path", []))
-	if path.size() <= 1:
-		pending_movement.clear()
-		_emit("movement_completed", {
-			"actor_id": actor_id,
-			"to": actor.grid_position.to_dictionary(),
-		})
-		return {
-			"success": true,
-			"kind": "move",
-			"actor_id": actor_id,
-			"completed": true,
-			"to": actor.grid_position.to_dictionary(),
-			"ap_remaining": actor.ap,
-			"events": _events_since(event_start_index),
-		}
-	var from: Dictionary = actor.grid_position.to_dictionary()
-	var next_grid: Dictionary = _dictionary_or_empty(path[1]).duplicate(true)
-	_spend_ap(actor, 1.0, "move_step")
-	_auto_open_door_for_step(actor.actor_id, next_grid, topology)
-	actor.grid_position = GridCoord.from_dictionary(next_grid)
-	_emit("movement_step", {
-		"actor_id": actor.actor_id,
-		"from": from.duplicate(true),
-		"to": next_grid.duplicate(true),
-		"step_index": int(pending_movement.get("step_index", 0)) + 1,
-	})
-	path.remove_at(0)
-	pending_movement["path"] = path
-	pending_movement["available_ap"] = actor.ap
-	pending_movement["required_ap"] = float(max(0, path.size() - 1))
-	pending_movement["remaining_steps"] = max(0, path.size() - 1)
-	pending_movement["step_index"] = int(pending_movement.get("step_index", 0)) + 1
-	if path.size() <= 1:
-		pending_movement.clear()
-		_emit("actor_moved", {
-			"actor_id": actor.actor_id,
-			"from": from.duplicate(true),
-			"to": next_grid.duplicate(true),
-			"steps": 1,
-			"step_mode": true,
-		})
-		_emit("movement_completed", {
-			"actor_id": actor.actor_id,
-			"to": next_grid.duplicate(true),
-		})
-	return {
-		"success": true,
-		"kind": "move",
-		"actor_id": actor.actor_id,
-		"from": from,
-		"to": next_grid,
-		"completed": pending_movement.is_empty(),
-		"pending": not pending_movement.is_empty(),
-		"pending_movement": pending_movement.duplicate(true),
-		"ap_remaining": actor.ap,
-		"events": _events_since(event_start_index),
-	}
+	return _movement_command_handler.step_move(self, actor_id, topology)
 
 
 func pending_move_snapshot(actor_id: int) -> Dictionary:
-	if pending_movement.is_empty() or int(pending_movement.get("actor_id", actor_id)) != actor_id:
-		return {}
-	return pending_movement.duplicate(true)
+	return _movement_command_handler.pending_move_snapshot(self, actor_id)
 
 
 func cancel_move(actor_id: int, reason: String = "cancelled") -> Dictionary:
-	if pending_movement.is_empty() or int(pending_movement.get("actor_id", actor_id)) != actor_id:
-		return {"success": true, "had_pending": false, "reason": reason}
-	var movement := pending_movement.duplicate(true)
-	pending_movement.clear()
-	_emit("movement_cancelled", {
-		"actor_id": actor_id,
-		"reason": reason,
-		"pending_movement": movement.duplicate(true),
-	})
-	return {
-		"success": true,
-		"had_pending": true,
-		"reason": reason,
-		"pending_movement": movement,
-	}
+	return _movement_command_handler.cancel_move(self, actor_id, reason)
 
 
 func should_end_actor_turn(actor_id: int) -> Dictionary:
