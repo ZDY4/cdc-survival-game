@@ -8,6 +8,8 @@ const HOVER_COLOR_INTERACTION := Color(1.0, 0.82, 0.18, 0.72)
 const HOVER_COLOR_MOVE_REACHABLE := Color(0.24, 0.95, 0.48, 0.72)
 const HOVER_COLOR_MOVE_BLOCKED := Color(1.0, 0.22, 0.18, 0.72)
 const HOVER_COLOR_MOVE_PENDING := Color(1.0, 0.78, 0.18, 0.58)
+const MOVE_PATH_DOT_COLOR := Color(1.0, 1.0, 1.0, 0.30)
+const PENDING_MOVE_PATH_DOT_COLOR := Color(1.0, 1.0, 1.0, 0.34)
 const HOVER_COLOR_ATTACK_REACHABLE := Color(1.0, 0.45, 0.16, 0.78)
 const HOVER_COLOR_ATTACK_BLOCKED := Color(0.95, 0.12, 0.28, 0.78)
 const HOVER_COLOR_PICKUP := Color(0.35, 0.82, 1.0, 0.50)
@@ -317,7 +319,7 @@ func clear_attack_range_markers() -> void:
 	attack_range_markers.set_meta("attack_target_actor_id", 0)
 
 
-func update_move_path_preview_markers(move_preview: Dictionary, color: Color, observed_level: int) -> void:
+func update_move_path_preview_markers(move_preview: Dictionary, _color: Color, observed_level: int) -> void:
 	if move_path_preview_markers == null:
 		return
 	clear_move_path_preview_markers()
@@ -332,8 +334,7 @@ func update_move_path_preview_markers(move_preview: Dictionary, color: Color, ob
 			continue
 		var step_index: int = max(0, index)
 		var within_current_ap: bool = step_index <= affordable_steps
-		var marker_color: Color = color if within_current_ap else HOVER_COLOR_MOVE_PENDING
-		var marker := _build_move_path_preview_marker(marker_color, index, path.size())
+		var marker := _build_move_path_preview_marker(index, path.size())
 		marker.position = Vector3(
 			float(grid.get("x", 0)),
 			float(grid.get("y", observed_level)) + 0.12,
@@ -582,7 +583,7 @@ func _build_attack_range_marker(color: Color) -> MeshInstance3D:
 	return node
 
 
-func _build_move_path_preview_marker(color: Color, index: int, path_length: int) -> MeshInstance3D:
+func _build_move_path_preview_marker(index: int, path_length: int) -> MeshInstance3D:
 	var mesh := CylinderMesh.new()
 	var radius := 0.24 if index == 0 or index == path_length - 1 else 0.19
 	mesh.top_radius = radius
@@ -590,7 +591,7 @@ func _build_move_path_preview_marker(color: Color, index: int, path_length: int)
 	mesh.height = 0.032
 	mesh.radial_segments = 24
 	var material := StandardMaterial3D.new()
-	material.albedo_color = Color(color.r, color.g, color.b, 0.30)
+	material.albedo_color = MOVE_PATH_DOT_COLOR
 	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	material.no_depth_test = true
@@ -609,7 +610,7 @@ func _build_pending_movement_path_marker(index: int, path_length: int) -> MeshIn
 	mesh.height = 0.036
 	mesh.radial_segments = 24
 	var material := StandardMaterial3D.new()
-	material.albedo_color = Color(HOVER_COLOR_MOVE_PENDING.r, HOVER_COLOR_MOVE_PENDING.g, HOVER_COLOR_MOVE_PENDING.b, 0.34)
+	material.albedo_color = PENDING_MOVE_PATH_DOT_COLOR
 	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	material.no_depth_test = true

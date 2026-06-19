@@ -3386,6 +3386,13 @@ func _expect_move_path_preview_markers(errors: Array[String], game_root: Node, m
 		var marker_mesh := (marker as MeshInstance3D).mesh
 		if not (marker_mesh is CylinderMesh):
 			errors.append("move path preview marker should use CylinderMesh dots")
+		var marker_material := (marker as MeshInstance3D).material_override as StandardMaterial3D
+		if marker_material == null:
+			errors.append("move path preview marker should expose material")
+		elif marker_material.albedo_color.r < 0.99 \
+				or marker_material.albedo_color.g < 0.99 \
+				or marker_material.albedo_color.b < 0.99:
+			errors.append("move path preview marker should use white dots")
 	if int(marker.get_meta("path_index", -1)) != 0:
 		errors.append("first move path marker should expose path index")
 	if not bool(marker.get_meta("reachable", false)):
@@ -3496,6 +3503,13 @@ func _expect_pending_movement_path_markers(errors: Array[String], game_root: Nod
 			var marker_mesh := (marker as MeshInstance3D).mesh
 			if not (marker_mesh is CylinderMesh):
 				errors.append("pending movement marker should use CylinderMesh dots")
+			var marker_material := (marker as MeshInstance3D).material_override as StandardMaterial3D
+			if marker_material == null:
+				errors.append("pending movement marker should expose material")
+			elif marker_material.albedo_color.r < 0.99 \
+					or marker_material.albedo_color.g < 0.99 \
+					or marker_material.albedo_color.b < 0.99:
+				errors.append("pending movement marker should use white dots")
 		if int(marker.get_meta("actor_id", 0)) != 1:
 			errors.append("pending movement marker should expose actor id")
 		if _dictionary_or_empty(marker.get_meta("grid", {})).is_empty():
