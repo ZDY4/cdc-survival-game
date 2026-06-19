@@ -2,7 +2,7 @@
 
 来源文件：`godot/scripts/core/simulation/simulation.gd`
 
-当前规模：约 `4057` 行、`337` 个函数（其中绝大多数已是 1–3 行的委托桩，真正含逻辑的实现约 60 个、合计约 2300 行）。
+当前规模：约 `2598` 行、`337` 个函数（其中多数已是 1–3 行的委托桩，真实逻辑主要集中在回合编排、NPC 接近/回合、事件入口和通用工具边界）。
 
 > 说明：本文前身是「Simulation 函数归属 Inventory」，依据当时 7239 行的代码编写、并服务于一个已删除的主计划 `15_simulation_domain_refactor_plan.md`。原文的行号、Phase 0–7 编号、以及大量"待抽取"条目均已过时。本次已按当前代码实况重写，使其成为一份**自洽、可直接实施**的计划：不再引用任何外部主计划，阶段编号自成体系，定位以**函数名**为准（行号易随改动失效，仅作粗略参考）。
 
@@ -13,12 +13,25 @@
 `simulation.gd` 已是一个 facade：public API 保留薄封装，内部委托到 `scripts/core/simulation/` 下的 service 与 command handler。已落地的协作者：
 
 **services/**
-`command_result_service`、`container_session_service`、`crafting_service`、`door_service`、`life_needs_service`、`life_planner_service`、`skill_runtime_service`、`combat_service`、`npc_turn_service`、`pending_action_service`、`trade_service`、`turn_flow_service`、`turn_state_service`、`world_turn_service`
+`command_result_service`、`container_session_service`、`crafting_service`、`door_service`、`life_needs_service`、`life_planner_service`、`skill_runtime_service`、`combat_service`、`effect_runtime_service`、`hotbar_service`、`npc_turn_service`、`pending_action_service`、`relationship_service`、`trade_service`、`turn_flow_service`、`turn_state_service`、`world_turn_service`
 
 **commands/**
-`player_command_router`、`combat_command_handler`、`crafting_command_handler`
+`player_command_router`、`combat_command_handler`、`crafting_command_handler`、`interaction_command_handler`、`inventory_command_handler`、`movement_command_handler`
 
-最近三轮（生活需求 / 生活规划 / 技能 / 战斗）已将四个大域迁出，`simulation.gd` 从约 7239 行降至 4057 行。
+本计划 A-H 阶段已在 `2026-06-19` 全部完成，`simulation.gd` 从约 7239 行降至 2598 行。阶段提交如下：
+
+| 阶段 | 结果 | 提交 |
+| --- | --- | --- |
+| Phase A HotbarService | 已完成 | `c0d6b980 拆分模拟热栏服务` |
+| Phase H 门运行时拓扑补迁 | 已完成 | `e8f19dc0 拆分门运行时拓扑服务` |
+| Phase E 战斗弹药/耐久补迁 | 已完成 | `a994492a 迁移战斗弹药耐久逻辑` |
+| Phase F EffectRuntimeService | 已完成 | `d9829a32 拆分激活效果运行时服务` |
+| Phase B MovementCommandHandler | 已完成 | `29be672a 拆分玩家移动命令处理` |
+| Phase D InventoryCommandHandler | 已完成 | `3c27a0cf 拆分库存命令处理` |
+| Phase C InteractionCommandHandler | 已完成 | `6411babe 拆分交互命令处理` |
+| Phase G RelationshipService | 已完成 | `13ce14e3 拆分关系评分服务` |
+
+Phase G 收尾验证覆盖：`Combat`、`Interaction`、`DialogueAction`、`Quest`、`ContainerUI`、`TradeUI`、`PlayerInteraction`，以及 `run_godot_validate.bat`。`ContainerUI` 退出码为 0，但 Godot 退出时仍打印 resource/object leak warning，暂不视作本拆分阻塞。
 
 ---
 
@@ -62,11 +75,11 @@
 
 ---
 
-## 四、待拆领域与阶段
+## 四、执行阶段记录
 
-按"独立性高、内聚强、回调链短"优先。每阶段独立成 1 个可编译 commit。行数为当前实现体量的估算。
+以下阶段均已完成。保留原阶段说明用于追溯拆分边界、验证范围和为何某些 facade 方法仍保留同名委托桩。
 
-### Phase A — HotbarService（约 230 行，低风险，推荐首选）
+### Phase A — HotbarService（已完成，约 230 行，低风险）
 
 热键组逻辑几乎零跨域耦合，只读写 `active_hotbar_group` 与 actor 的 hotbar 字段，是当前最干净的一块。
 
@@ -74,7 +87,7 @@
 - facade 三个函数保签名；`_submit_bind_hotbar_command` 仍由 `player_command_router` 的 `bind_hotbar` 分支调用，保留桩。
 - 验证：`PlayerInteraction`、`SkillsUI`、`Save`、`UiToggle`、`Runtime`。
 
-### Phase B — MovementCommandHandler（约 230 行，中低风险）
+### Phase B — MovementCommandHandler（已完成，约 230 行，中低风险）
 
 玩家移动命令族，调用方集中（`begin_move`/`step_move`/`cancel_move` 由 `turn_action_runner`，`preview_move` 由 `hover_state_controller`）。
 
@@ -84,9 +97,9 @@
 - `move_actor_to` / `preview_move` / `begin_move` / `step_move` / `cancel_move` 保签名。
 - 验证：`Movement`、`PlayerInteraction`、`Combat`、`Runtime`。
 
-### Phase C — InteractionCommandHandler（约 325 行，中风险，单一最大未拆块）
+### Phase C — InteractionCommandHandler（已完成，约 325 行，中风险）
 
-交互"接近后执行"链，是剩余体量最大的玩家命令域，内聚度高。
+交互"接近后执行"链原是剩余体量最大的玩家命令域，内聚度高。
 
 - 迁移：`_submit_interact_command`、`_approach_then_execute_interaction`、`_begin_interaction_approach_for_runner`、`begin_interaction_for_runner`、`_approach_goal_for_prompt`、`_interaction_goals`、`_interaction_option`、`_disabled_interaction_option`、`_interaction_success_payload`、`_interaction_target_grid`、`_actor_can_reach_interaction`。
 - **`_approach_then_execute_interaction` 是共享依赖**：`combat_command_handler`（attack 路径的"接近源目标再交互"）也调用它。迁移后必须保留经 `simulation.` 可达（桩转发），不能假定它只属交互域。
@@ -97,13 +110,13 @@
 - 验证：`Interaction`、`PlayerInteraction`、`Door`、`Overworld`、`Ui`、`UiToggle`、`Combat`（因 attack 路径共享接近逻辑）。
 
 
-### Phase D — InventoryCommandHandler（约 280 行，中风险）
+### Phase D — InventoryCommandHandler（已完成，约 280 行，中风险）
 
 - 迁移：`_submit_inventory_action_command`、`_split_actor_inventory_stack`、`_reorder_actor_inventory`、`_actor_inventory_stacks_for`、`_largest_stack_index`、`_submit_use_item_action`、`_submit_reload_equipped_action`。
 - `_submit_inventory_action_command` 由 `player_command_router` 的 `inventory_action` 分支调用，保留桩。
 - 验证：`InventoryUI`、`ContainerUI`、`Equipment`、`PlayerInteraction`。
 
-### Phase E — 战斗弹药/耐久补迁（约 185 行，低风险）
+### Phase E — 战斗弹药/耐久补迁（已完成，约 185 行，低风险）
 
 上一轮抽 `combat_service` 时，攻击档案/校验类函数（`_attack_profile`、`_attack_ammo_check`、`_attack_weapon_durability_check`、`_weapon_durability`、`_weapon_fragment`、`_attack_min_range_from_options`、`_attack_command_options`、`_weapon_min_range`）已迁出、现为委托桩；但**实际消耗逻辑仍留在 `simulation.gd`**，应补迁归位到 `combat_service`。
 
@@ -113,14 +126,14 @@
 - 验证：`Combat`、`Equipment`、`AI`。
 
 
-### Phase F — EffectRuntimeService（约 180 行，低风险）
+### Phase F — EffectRuntimeService（已完成，约 180 行，低风险）
 
 回合制激活效果 tick，可独立成 service，或并入 `turn_flow_service`。
 
 - 迁移：`_tick_actor_active_effects`、`_apply_active_effect_damage_tick`、`_active_effect_tick_damage`、`_effect_tick_damage_value`、`_effect_data`、`_defeat_actor_from_active_effect`、`_actor_has_special_effect`、`_actor_special_effects`、`_stunned_turn_skip_payload`、`_stunned_npc_turn_result`、`_submit_stunned_player_turn`。
 - 验证：`Combat`、`AI`、`Progression`、`Runtime`。
 
-### Phase G — RelationshipService（约 170 行，中高风险）
+### Phase G — RelationshipService（已完成，约 170 行，中高风险）
 
 关系/敌对评分。**调用方极多**（见对外契约表），回调耦合最重，收益相对靠后。
 
@@ -128,30 +141,33 @@
 - 三个 public（`actor_hostility`/`relationship_score`/`set_relationship_score`）+ `are_actors_hostile` 保签名。
 - 验证：`Combat`、`Interaction`、`Trade`、`Dialogue`、`Quest`、`Container`、`PlayerInteraction`。
 
-### Phase H — 门运行时拓扑补迁（约 120 行，低风险）
+### Phase H — 门运行时拓扑补迁（已完成，约 120 行，低风险）
 
 - 迁移到 `door_service`：`_topology_with_auto_open_doors`、`_topology_with_runtime_door_states`、`_apply_door_runtime_blocking_cells`、`_auto_open_door_for_step`、`_door_for_grid`、`_door_can_auto_open`。
 - 验证：`Door`、`Movement`、`Interaction`。
 
 ---
 
-## 五、明确不拆 / 暂缓的部分
+## 五、完成后仍不拆 / 暂缓的部分
 
 诚实标注边际，避免为拆而拆：
 
 - **`emit_event` / `_emit`**：纯事件入口，被全仓 30+ 处调用，留在 facade。
 - **配置入口 `configure_*`（7 个）**：多为 3 行薄封装，拆分零收益。
 - **通用工具**：`_dictionary_or_empty`、`_array_or_empty`、`_grid_distance`、`_optional_int/float`、`_string_array`、`_grid_key`、`_normalize_item_id` 等。无共享 `utils.gd`，按消费方就近归并即可，不单独建文件。
-- **`*_for_runner` 回合编排族（约 400 行，最大的单一剩余簇）**：被 `turn_action_runner` 经 `has_method` + `call("name")` **动态分发**调用（见对外契约），且与 `world_turn_service` / `npc_turn_service` / `turn_flow_service` / `pending_action_service` 深度交织。技术上可抽 `TurnRunnerService`，但：① 必须在 `Simulation` 保留全部同名委托桩（否则 `has_method` 守卫失效）；② 回调链最长、状态耦合最重。**暂缓**至 Phase A–D 完成、回合/pending 状态边界更清晰后再评估。这是收益/风险比最差的一块，不建议早做。
+- **`*_for_runner` 回合编排族（当前最大单一剩余簇）**：被 `turn_action_runner` 经 `has_method` + `call("name")` **动态分发**调用（见对外契约），且与 `world_turn_service` / `npc_turn_service` / `turn_flow_service` / `pending_action_service` 深度交织。技术上可抽 `TurnRunnerService`，但：① 必须在 `Simulation` 保留全部同名委托桩（否则 `has_method` 守卫失效）；② 回调链最长、状态耦合最重。A-H 完成后仍建议暂缓，除非要修回合驱动 bug 或统一 runner 编排契约。
 - **`_npc_approach` 及 NPC 生活/战斗回合**：归 `npc_turn_service` 或后续 AI 专项，不在玩家命令域阶段处理。
 - **快照 `snapshot` / `load_snapshot`**：已委托 `simulation_snapshot_builder` / `_codec`，facade 仅 3–5 行，无需再动。
 - **生活 / 技能 / 战斗的剩余 3 行桩**：已是委托桩，属正常 facade 形态，不是待办。
 
-> **边际递减提醒**：life/skill/combat 是大块、低耦合，拆分干净。剩余各域与 `pending_*`、`combat_state`、各 runner 状态耦合更紧，回调链更长。建议按价值挑 1–2 块推进（首选 **Phase A、E、F、H** 这类低风险块），不必追求把 `simulation.gd` 拆到某个行数目标。facade 本身保留一定厚度是合理的。
+> **边际递减提醒**：A-H 完成后，继续压缩 `simulation.gd` 的收益明显下降。剩余真实逻辑与 `pending_*`、`combat_state`、各 runner 状态耦合更紧，回调链更长。facade 本身保留一定厚度是合理的。
 
-### 推荐执行顺序
+### 后续可评估项
 
-低风险、高确定性优先：**A（Hotbar）→ H（门拓扑补迁）→ E（弹药补迁）→ F（效果 tick）→ B（Movement）→ D（Inventory）→ C（Interaction）→ G（Relationship）**。A/H/E/F 四个小阶段合计约 700 行、几乎零跨域风险，做完 `simulation.gd` 可降到约 3350 行；B/D/C/G 视精力推进；`*_for_runner` 最后再议。
+- **TurnRunnerService 探索**：只建议在出现回合驱动 bug、runner 状态一致性问题，或需要重做 turn action 调试面板时推进。拆分前先列出所有 `has_method` / `call` 动态入口，并为每个入口保留 `Simulation` 同名 facade。
+- **NPC approach 小阶段**：`_npc_approach` / `_npc_approach_attempt_summary` 可考虑迁入 `npc_turn_service`，但要和 AI smoke、combat smoke 一起验证。
+- **通用工具收口**：`_dictionary_or_empty`、`_array_or_empty`、`_grid_distance`、`_optional_int/float`、`_string_array` 等继续留在 facade；只有当多个 service 产生稳定重复实现时，再抽职责明确的小模块，不新建大而泛的 `utils.gd`。
+- **无关 dirty 工作区处理**：当前仓库可能残留 Godot import / sprite rig / `project.godot` 之类非本计划改动。后续开发前应单独确认来源，避免混入功能提交。
 
 ---
 
@@ -183,4 +199,3 @@
 | AI / life | `AI`、`Combat`、`Runtime`、`World` |
 
 > 已知无关失败：`save_smoke` / `ui_toggle_smoke` / `skills_ui_smoke` 曾因 `game_input_router` 的 viewport 类型推断报错失败，已在 commit `b27e967b` 修复。若再现类似 "Cannot infer the type" 解析错误，优先排查是否漏了架构约定第 5 条的显式类型标注。
-
