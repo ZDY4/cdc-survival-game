@@ -819,10 +819,29 @@ func _clear_move_path_preview_markers() -> void:
 
 
 func _sync_move_path_preview_with_active_movement() -> void:
-	if game_root == null or not game_root.has_method("world_action_presenter_snapshot"):
+	if game_root == null:
 		return
-	var presenter: Dictionary = _dictionary_or_empty(game_root.world_action_presenter_snapshot())
+	var presenter: Dictionary = _active_turn_runner_move_snapshot()
+	if presenter.is_empty() and game_root.has_method("world_action_presenter_snapshot"):
+		presenter = _dictionary_or_empty(game_root.world_action_presenter_snapshot())
 	runtime_marker_controller.sync_move_path_preview_with_active_movement(presenter)
+
+
+func _active_turn_runner_move_snapshot() -> Dictionary:
+	if game_root == null or not game_root.has_method("turn_action_runner_snapshot"):
+		return {}
+	var runner: Dictionary = _dictionary_or_empty(game_root.turn_action_runner_snapshot())
+	if str(runner.get("action_kind", "")) != "move":
+		return {}
+	var path: Array = _array_or_empty(runner.get("path", []))
+	if path.is_empty():
+		return {}
+	return {
+		"active": bool(runner.get("active", false)) or bool(runner.get("presentation_active", false)),
+		"kind": "movement",
+		"path": path.duplicate(true),
+		"current_step_index": int(runner.get("step_index", runner.get("completed_steps", 0))),
+	}
 
 
 func _update_pending_movement_path_markers() -> void:

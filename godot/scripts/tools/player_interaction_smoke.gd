@@ -2714,11 +2714,20 @@ func _expect_mouse_left_click_far_ground_starts_moving(errors: Array[String], ga
 	var target: Dictionary = _far_open_grid_from(before, game_root.world_result.get("map", {}))
 	var screen_position := camera.unproject_position(Vector3(float(target["x"]), 0.0, float(target["z"])))
 	game_root.runtime_input_controller.update_hover_at_screen_position(screen_position)
+	var move_path_markers: Node3D = game_root.find_child("MovePathPreviewMarkers", true, false) as Node3D
+	var move_path_visible_before := _visible_child_count(move_path_markers) if move_path_markers != null else 0
 	await process_frame
 	var click_result: Dictionary = _dictionary_or_empty(game_root.request_player_move(target) if game_root.has_method("request_player_move") else {})
 	if not bool(click_result.get("success", false)):
 		errors.append("left mouse click movement request failed: %s" % click_result.get("reason", "unknown"))
 	await process_frame
+	game_root.runtime_input_controller.process(0.0)
+	if move_path_markers != null and move_path_visible_before > 0:
+		var move_path_visible_after := _visible_child_count(move_path_markers)
+		if int(move_path_markers.get_meta("current_movement_step_index", 0)) <= 0:
+			errors.append("move path preview should sync with turn runner movement step")
+		if move_path_visible_after >= move_path_visible_before:
+			errors.append("move path preview should hide passed dots during real movement")
 	var after: Dictionary = _player_grid(game_root)
 	if int(after.get("x", 0)) == int(before.get("x", 0)) and int(after.get("z", 0)) == int(before.get("z", 0)):
 		errors.append("left mouse click on far projected ground should start moving player from %s toward %s" % [JSON.stringify(before), JSON.stringify(target)])
