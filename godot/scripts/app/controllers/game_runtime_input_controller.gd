@@ -74,6 +74,7 @@ func process(delta: float) -> void:
 	if hover_refresh_requested and not camera_input_controller.is_dragging() and _mouse_inside_viewport():
 		hover_refresh_requested = false
 		update_hover_at_screen_position(game_root.get_viewport().get_mouse_position())
+	_sync_move_path_preview_with_active_movement()
 	_update_pending_movement_path_markers()
 
 
@@ -815,6 +816,13 @@ func _update_move_path_preview_markers(move_preview: Dictionary, color: Color) -
 
 func _clear_move_path_preview_markers() -> void:
 	runtime_marker_controller.clear_move_path_preview_markers()
+
+
+func _sync_move_path_preview_with_active_movement() -> void:
+	if game_root == null or not game_root.has_method("world_action_presenter_snapshot"):
+		return
+	var presenter: Dictionary = _dictionary_or_empty(game_root.world_action_presenter_snapshot())
+	runtime_marker_controller.sync_move_path_preview_with_active_movement(presenter)
 
 
 func _update_pending_movement_path_markers() -> void:

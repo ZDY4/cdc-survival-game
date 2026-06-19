@@ -377,6 +377,38 @@ func clear_move_path_preview_markers() -> void:
 	move_path_preview_markers.set_meta("affordable_steps", 0)
 	move_path_preview_markers.set_meta("requires_pending", false)
 	move_path_preview_markers.set_meta("pending_steps", 0)
+	move_path_preview_markers.set_meta("current_movement_step_index", 0)
+	move_path_preview_markers.set_meta("visible_marker_count", 0)
+
+
+func sync_move_path_preview_with_active_movement(movement_snapshot: Dictionary) -> void:
+	if move_path_preview_markers == null:
+		return
+	if move_path_preview_markers.get_child_count() <= 0:
+		return
+	if not bool(movement_snapshot.get("active", false)) or str(movement_snapshot.get("kind", "")) != "movement":
+		if _move_path_preview_reached_presenter_target(movement_snapshot):
+			clear_move_path_preview_markers()
+		return
+	var current_step_index := int(movement_snapshot.get("current_step_index", 0))
+	var path: Array = _array_or_empty(movement_snapshot.get("path", []))
+	var target_key := _grid_key(_dictionary_or_empty(path[path.size() - 1])) if not path.is_empty() else ""
+	for child in move_path_preview_markers.get_children():
+		var marker := child as Node
+		if marker == null:
+			continue
+		var marker_index := int(marker.get_meta("path_index", -1))
+		var marker_grid: Dictionary = _dictionary_or_empty(marker.get_meta("grid", {}))
+		var marker_key := _grid_key(marker_grid)
+		var passed_step := marker_index >= 0 and marker_index <= current_step_index
+		if target_key != "" and marker_key == target_key and marker_index == current_step_index:
+			passed_step = false
+		if marker is Node3D:
+			(marker as Node3D).visible = not passed_step
+		elif marker is CanvasItem:
+			(marker as CanvasItem).visible = not passed_step
+	move_path_preview_markers.set_meta("current_movement_step_index", current_step_index)
+	move_path_preview_markers.set_meta("visible_marker_count", _visible_child_count(move_path_preview_markers))
 
 
 func update_pending_movement_path_markers(pending: Dictionary, observed_level: int) -> void:
@@ -551,9 +583,12 @@ func _build_attack_range_marker(color: Color) -> MeshInstance3D:
 
 
 func _build_move_path_preview_marker(color: Color, index: int, path_length: int) -> MeshInstance3D:
-	var mesh := BoxMesh.new()
-	var width := 0.42 if index == 0 or index == path_length - 1 else 0.34
-	mesh.size = Vector3(width, 0.032, width)
+	var mesh := CylinderMesh.new()
+	var radius := 0.24 if index == 0 or index == path_length - 1 else 0.19
+	mesh.top_radius = radius
+	mesh.bottom_radius = radius
+	mesh.height = 0.032
+	mesh.radial_segments = 24
 	var material := StandardMaterial3D.new()
 	material.albedo_color = Color(color.r, color.g, color.b, 0.30)
 	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
@@ -567,9 +602,12 @@ func _build_move_path_preview_marker(color: Color, index: int, path_length: int)
 
 
 func _build_pending_movement_path_marker(index: int, path_length: int) -> MeshInstance3D:
-	var mesh := BoxMesh.new()
-	var width := 0.50 if index == path_length - 1 else 0.38
-	mesh.size = Vector3(width, 0.036, width)
+	var mesh := CylinderMesh.new()
+	var radius := 0.28 if index == path_length - 1 else 0.21
+	mesh.top_radius = radius
+	mesh.bottom_radius = radius
+	mesh.height = 0.036
+	mesh.radial_segments = 24
 	var material := StandardMaterial3D.new()
 	material.albedo_color = Color(HOVER_COLOR_MOVE_PENDING.r, HOVER_COLOR_MOVE_PENDING.g, HOVER_COLOR_MOVE_PENDING.b, 0.34)
 	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
@@ -588,3 +626,35 @@ func _dictionary_or_empty(value: Variant) -> Dictionary:
 
 func _array_or_empty(value: Variant) -> Array:
 	return value if typeof(value) == TYPE_ARRAY else []
+
+
+func _move_path_preview_reached_presenter_target(movement_snapshot: Dictionary) -> bool:
+	if str(movement_snapshot.get("kind", "")) != "movement":
+		return false
+	var path: Array = _array_or_empty(movement_snapshot.get("path", []))
+	if path.is_empty():
+		return false
+	var target_key := _grid_key(_dictionary_or_empty(path[path.size() - 1]))
+	if target_key == "":
+		return false
+	for child in move_path_preview_markers.get_children():
+		var marker := child as Node
+		if marker != null and _grid_key(_dictionary_or_empty(marker.get_meta("grid", {}))) == target_key:
+			return true
+	return false
+
+
+func _visible_child_count(parent: Node) -> int:
+	var count := 0
+	for child in parent.get_children():
+		if child is CanvasItem and (child as CanvasItem).visible:
+			count += 1
+		elif child is Node3D and (child as Node3D).visible:
+			count += 1
+	return count
+
+
+func _grid_key(grid: Dictionary) -> String:
+	if grid.is_empty():
+		return ""
+	return "%d:%d:%d" % [int(grid.get("x", 0)), int(grid.get("y", 0)), int(grid.get("z", 0))]

@@ -3264,6 +3264,7 @@ func _expect_ground_hover_move_preview(errors: Array[String], game_root: Node, c
 	_expect_ground_hover_cursor_preview(errors, game_root)
 	_expect_move_path_preview_markers(errors, game_root, move_preview)
 	_expect_same_ground_hover_reuses_move_path_preview_markers(errors, game_root, hover_screen_position)
+	_expect_move_path_preview_updates_during_movement(errors, game_root, move_preview)
 	var prompt: Dictionary = _dictionary_or_empty(hover.get("prompt", {}))
 	if str(prompt.get("primary_option_id", "")) != "move":
 		errors.append("ground hover prompt should expose move primary option")
@@ -3370,6 +3371,12 @@ func _expect_move_path_preview_markers(errors: Array[String], game_root: Node, m
 	if marker == null:
 		errors.append("move path preview should create marker nodes")
 		return
+	if not (marker is MeshInstance3D):
+		errors.append("move path preview marker should remain MeshInstance3D")
+	else:
+		var marker_mesh := (marker as MeshInstance3D).mesh
+		if not (marker_mesh is CylinderMesh):
+			errors.append("move path preview marker should use CylinderMesh dots")
 	if int(marker.get_meta("path_index", -1)) != 0:
 		errors.append("first move path marker should expose path index")
 	if not bool(marker.get_meta("reachable", false)):
@@ -3412,6 +3419,37 @@ func _expect_same_ground_hover_reuses_move_path_preview_markers(errors: Array[St
 		errors.append("same ground hover should reuse existing move path marker nodes")
 
 
+func _expect_move_path_preview_updates_during_movement(errors: Array[String], game_root: Node, move_preview: Dictionary) -> void:
+	var container: Node3D = game_root.find_child("MovePathPreviewMarkers", true, false) as Node3D
+	if container == null:
+		return
+	var path: Array = _array_or_empty(move_preview.get("path", []))
+	if path.size() < 2:
+		return
+	var visible_before := _visible_child_count(container)
+	var step_index := 1
+	var presenter: Dictionary = {
+		"active": true,
+		"kind": "movement",
+		"path": path.duplicate(true),
+		"current_step_index": step_index,
+	}
+	game_root.runtime_input_controller.runtime_marker_controller.sync_move_path_preview_with_active_movement(presenter)
+	var visible_during := _visible_child_count(container)
+	if visible_during >= visible_before:
+		errors.append("move path preview should hide passed dots during movement")
+	if int(container.get_meta("visible_marker_count", visible_during)) != visible_during:
+		errors.append("move path preview should expose visible marker count during movement")
+	game_root.runtime_input_controller.runtime_marker_controller.sync_move_path_preview_with_active_movement({
+		"active": false,
+		"kind": "movement",
+		"path": path.duplicate(true),
+		"current_step_index": max(0, path.size() - 1),
+	})
+	if int(container.get_meta("marker_count", 0)) != 0:
+		errors.append("move path preview should clear after movement reaches target")
+
+
 func _expect_pending_movement_path_markers(errors: Array[String], game_root: Node) -> void:
 	var before_pending: Dictionary = _dictionary_or_empty(game_root.simulation.pending_movement).duplicate(true)
 	var before: Dictionary = _player_grid(game_root)
@@ -3443,6 +3481,12 @@ func _expect_pending_movement_path_markers(errors: Array[String], game_root: Nod
 	if marker == null:
 		errors.append("pending movement should create path marker nodes")
 	else:
+		if not (marker is MeshInstance3D):
+			errors.append("pending movement marker should remain MeshInstance3D")
+		else:
+			var marker_mesh := (marker as MeshInstance3D).mesh
+			if not (marker_mesh is CylinderMesh):
+				errors.append("pending movement marker should use CylinderMesh dots")
 		if int(marker.get_meta("actor_id", 0)) != 1:
 			errors.append("pending movement marker should expose actor id")
 		if _dictionary_or_empty(marker.get_meta("grid", {})).is_empty():
@@ -3487,6 +3531,16 @@ func _occupied_actor_grid_keys(game_root: Node) -> Dictionary:
 		var key := "%d:%d:%d" % [int(grid.get("x", 0)), int(grid.get("y", 0)), int(grid.get("z", 0))]
 		occupied[key] = true
 	return occupied
+
+
+func _visible_child_count(parent: Node) -> int:
+	var count := 0
+	for child in parent.get_children():
+		if child is Node3D and (child as Node3D).visible:
+			count += 1
+		elif child is CanvasItem and (child as CanvasItem).visible:
+			count += 1
+	return count
 
 
 func _expect_cancel_pending(errors: Array[String], game_root: Node) -> void:

@@ -160,6 +160,7 @@ func start_movement_tween(host: Node, world_root: Node, movement: Dictionary) ->
 		if index - 1 < movement_facings.size():
 			tween.tween_callback(Callable(self, "_apply_movement_facing").bind(weakref(actor_node), _dictionary_or_empty(movement_facings[index - 1])))
 		tween.tween_property(actor_node, "position", _grid_to_world(_dictionary_or_empty(path[index]), y), STEP_DURATION_SEC)
+		tween.tween_callback(Callable(self, "_set_movement_step_reached").bind(weakref(actor_node), index, _dictionary_or_empty(path[index])))
 	tween.finished.connect(Callable(self, "_on_movement_tween_finished").bind(run_sequence, weakref(actor_node)))
 	var snapshot_data := movement_public_snapshot(movement, true)
 	snapshot_data["door_auto_open_marker_paths"] = door_marker_paths
@@ -399,6 +400,16 @@ func _apply_movement_facing(actor_ref: WeakRef, facing: Dictionary) -> void:
 	_tracker.set_latest_value("current_step_index", int(facing.get("step_index", 0)))
 	_tracker.set_latest_value("current_facing_direction", str(facing.get("direction", "")))
 	_tracker.set_latest_value("current_facing_yaw_degrees", yaw)
+
+
+func _set_movement_step_reached(actor_ref: WeakRef, step_index: int, grid: Dictionary) -> void:
+	var actor_node := actor_ref.get_ref() as Node3D
+	if actor_node == null or actor_node.is_queued_for_deletion():
+		return
+	actor_node.set_meta("action_presenter_current_step_index", step_index)
+	actor_node.set_meta("action_presenter_current_grid", grid.duplicate(true))
+	_tracker.set_latest_value("current_step_index", step_index)
+	_tracker.set_latest_value("current_grid", grid.duplicate(true))
 
 
 func _start_door_auto_open_markers(host: Node, world_root: Node, movement: Dictionary, path: Array) -> Array[String]:
