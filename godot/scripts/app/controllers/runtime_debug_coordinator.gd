@@ -301,6 +301,25 @@ func runtime_control_snapshot() -> Dictionary:
 	return snapshot
 
 
+func runtime_hud_snapshot() -> Dictionary:
+	var snapshot: Dictionary = dictionary_or_empty(host.runtime_control_state_controller.call("runtime_control_snapshot"))
+	snapshot["world_time"] = host.runtime_world_time_snapshot()
+	snapshot["map_level"] = host.map_level_snapshot()
+	snapshot["focused_actor"] = host.focused_actor_snapshot()
+	snapshot["ui_blocker"] = host.gameplay_input_blocker_name()
+	snapshot["ui_blocker_snapshot"] = host.gameplay_input_blocker_snapshot()
+	snapshot["menu_state"] = host.menu_state_snapshot()
+	snapshot["controls_hint"] = controls_hint_snapshot()
+	snapshot["debug_console"] = {"visible": host.is_debug_console_open() if host.has_method("is_debug_console_open") else false}
+	snapshot["hover"] = runtime_hover_snapshot()
+	snapshot["selection_debug"] = runtime_selection_debug_snapshot()
+	snapshot["turn_action_runner"] = host.turn_action_runner_snapshot()
+	snapshot["ai_debug"] = ai_debug_snapshot()
+	snapshot["performance"] = runtime_performance_snapshot()
+	snapshot["skill_targeting"] = host.active_skill_targeting_snapshot()
+	return snapshot
+
+
 func tooltip_render_snapshot() -> Dictionary:
 	var controller: RefCounted = host.game_ui_coordinator.call("ui_overlay_controller") as RefCounted
 	if controller == null:

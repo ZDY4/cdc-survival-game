@@ -79,6 +79,7 @@ func setup_panels() -> void:
 	crafting_panel = _ensure_panel(crafting_panel, CRAFTING_PANEL_SCENE, "CraftingPanelRoot")
 	settings_panel = _ensure_settings_panel()
 	_apply_ui_theme()
+	_seed_stage_panels()
 	_apply_stage_panel_visibility()
 	_apply_settings_panel_visibility()
 
@@ -110,14 +111,9 @@ func _theme_targets() -> Array[Control]:
 func refresh_all(selected_prompt: Dictionary = {}) -> void:
 	refresh_hud(selected_prompt)
 	refresh_dialogue_panel()
-	refresh_inventory_panel()
 	refresh_trade_panel()
 	refresh_container_panel()
-	refresh_character_panel()
-	refresh_journal_panel()
-	refresh_map_panel()
-	refresh_skills_panel()
-	refresh_crafting_panel()
+	_refresh_active_stage_panel()
 	_apply_stage_panel_visibility()
 	_apply_settings_panel_visibility()
 
@@ -130,9 +126,11 @@ func refresh_hud(selected_prompt: Dictionary = {}) -> void:
 		snapshot["debug_overlay_mode"] = parent.current_debug_overlay_mode()
 	if parent != null and parent.has_method("info_panel_snapshot"):
 		snapshot["info_panel"] = parent.info_panel_snapshot()
-	if parent != null and parent.has_method("runtime_control_snapshot"):
+	if parent != null and parent.has_method("runtime_hud_snapshot"):
+		snapshot["runtime_control"] = parent.runtime_hud_snapshot()
+	elif parent != null and parent.has_method("runtime_control_snapshot"):
 		snapshot["runtime_control"] = parent.runtime_control_snapshot()
-		_apply_runtime_attack_preview(snapshot)
+	_apply_runtime_attack_preview(snapshot)
 	snapshot["tracked_quest"] = _tracked_quest_snapshot()
 	if hud.has_method("apply_runtime_snapshot"):
 		hud.apply_runtime_snapshot(snapshot)
@@ -241,6 +239,31 @@ func refresh_crafting_panel() -> void:
 	_apply_stage_panel_visibility()
 
 
+func _seed_stage_panels() -> void:
+	for panel_id in _stage_panel_ids():
+		_refresh_stage_panel(panel_id)
+
+
+func _refresh_active_stage_panel() -> void:
+	_refresh_stage_panel(active_stage_panel)
+
+
+func _refresh_stage_panel(panel_id: String) -> void:
+	match panel_id:
+		"inventory":
+			refresh_inventory_panel()
+		"character":
+			refresh_character_panel()
+		"journal":
+			refresh_journal_panel()
+		"map":
+			refresh_map_panel()
+		"skills":
+			refresh_skills_panel()
+		"crafting":
+			refresh_crafting_panel()
+
+
 func update_world_result(value: Dictionary) -> void:
 	world_result = value
 
@@ -265,6 +288,7 @@ func toggle_stage_panel(panel_id: String) -> Dictionary:
 	active_stage_panel = "" if active_stage_panel == panel_id else panel_id
 	if not active_stage_panel.is_empty():
 		settings_open = false
+		_refresh_active_stage_panel()
 	_apply_stage_panel_visibility()
 	_apply_settings_panel_visibility()
 	refresh_hud()
@@ -281,6 +305,7 @@ func open_stage_panel(panel_id: String) -> Dictionary:
 		return {"success": false, "reason": "unknown_stage_panel", "panel_id": panel_id}
 	active_stage_panel = panel_id
 	settings_open = false
+	_refresh_active_stage_panel()
 	_apply_stage_panel_visibility()
 	_apply_settings_panel_visibility()
 	refresh_hud()

@@ -417,6 +417,9 @@ func info_panel_snapshot() -> Dictionary:
 func runtime_control_snapshot() -> Dictionary:
 	return _dictionary_or_empty(runtime_debug_coordinator.call("runtime_control_snapshot"))
 
+func runtime_hud_snapshot() -> Dictionary:
+	return _dictionary_or_empty(runtime_debug_coordinator.call("runtime_hud_snapshot"))
+
 func tooltip_render_snapshot() -> Dictionary:
 	return _dictionary_or_empty(runtime_debug_coordinator.call("tooltip_render_snapshot"))
 

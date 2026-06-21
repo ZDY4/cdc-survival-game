@@ -71,6 +71,8 @@ func apply(snapshot_data: Dictionary) -> void:
 	_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	if _title_label != null:
 		_title_label.text = "Debug Panel | F3 | %s" % ("on" if _visible else "off")
+	if not _visible:
+		return
 	if _lines_box == null:
 		return
 	for child in _lines_box.get_children():
