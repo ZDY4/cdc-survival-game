@@ -293,6 +293,23 @@ func snapshot() -> Dictionary:
 	}
 
 
+func drain_status() -> Dictionary:
+	# 轻量状态：供 drain / settle 循环逐步轮询使用，避免每步都构建完整 snapshot
+	# （后者含 ~10 次 .duplicate(true) 深拷贝 + 内嵌 actor_view 快照）。
+	# 字段与 snapshot() 中对应项保持一致。
+	var presentation_active := false
+	if actor_view != null and actor_view.has_method("is_active"):
+		presentation_active = bool(actor_view.call("is_active"))
+	return {
+		"active": active,
+		"presentation_active": presentation_active,
+		"presenting_npc_actor_id": int(action.get("presenting_npc_actor_id", 0)),
+		"actor_id": int(action.get("actor_id", 0)),
+		"phase": str(action.get("phase", "idle" if not active else "")),
+		"pending_kind": str(action.get("pending_kind", "")),
+	}
+
+
 func _runner_pending_movement_snapshot() -> Dictionary:
 	var pending: Dictionary = _dictionary_or_empty(action.get("pending_movement", {}))
 	if pending.is_empty():

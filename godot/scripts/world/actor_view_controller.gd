@@ -11,15 +11,46 @@ var active_tween: Tween
 var active_node_ref: WeakRef
 var background_tweens: Dictionary = {}
 var latest: Dictionary = {"active": false, "kind": "none"}
+# Per-frame cache of actor_id -> Node3D. actor_node() 和 _actor_nodes_snapshot()
+# 原本各自遍历整棵 world_container（成千上万节点），且一帧会被调用数十次。
+# 缓存让每帧最多遍历一次世界树，其余调用走字典查询。
+var _actor_node_map: Dictionary = {}
+var _actor_node_map_frame := -1
 
 
 func attach(p_world_container: Node3D) -> void:
 	world_container = p_world_container
 
 
+func _actor_node_map_for_frame() -> Dictionary:
+	var frame := Engine.get_process_frames()
+	if frame == _actor_node_map_frame:
+		return _actor_node_map
+	_actor_node_map = {}
+	_actor_node_map_frame = frame
+	if world_container == null:
+		return _actor_node_map
+	var pending: Array[Node] = [world_container]
+	while not pending.is_empty():
+		var node: Node = pending.pop_back()
+		var node_3d := node as Node3D
+		if node_3d != null and node_3d.has_meta("actor_id"):
+			var aid := int(node_3d.get_meta("actor_id", 0))
+			if aid > 0 and not _actor_node_map.has(aid):
+				_actor_node_map[aid] = node_3d
+		for child in node.get_children():
+			pending.append(child)
+	return _actor_node_map
+
+
 func actor_node(actor_id: int) -> Node3D:
 	if world_container == null:
 		return null
+	if actor_id > 0:
+		var cached := _actor_node_map_for_frame().get(actor_id, null) as Node3D
+		if cached != null and is_instance_valid(cached) and not cached.is_queued_for_deletion():
+			return cached
+	# Fallback: 保留原始全树遍历语义（处理 actor_id<=0、缓存未命中或本帧新增节点）。
 	var pending: Array[Node] = [world_container]
 	while not pending.is_empty():
 		var node: Node = pending.pop_back()
@@ -315,28 +346,22 @@ func _active_node_ref() -> Node3D:
 
 func _actor_nodes_snapshot() -> Dictionary:
 	var output: Dictionary = {}
-	if world_container == null:
-		return output
-	var pending: Array[Node] = [world_container]
-	while not pending.is_empty():
-		var node: Node = pending.pop_back()
-		var node_3d := node as Node3D
-		if node_3d != null and node_3d.has_meta("actor_id"):
-			var actor_id := int(node_3d.get_meta("actor_id", 0))
-			if actor_id > 0:
-				output[str(actor_id)] = {
-					"actor_id": actor_id,
-					"node_path": _node_path(node_3d),
-					"node_instance_id": node_3d.get_instance_id(),
-					"node_position": _node_global_position(node_3d),
-					"action_runner_active": bool(node_3d.get_meta("action_runner_active", false)),
-					"action_runner_step_active": bool(node_3d.get_meta("action_runner_step_active", false)),
-					"action_runner_kind": str(node_3d.get_meta("action_runner_kind", "")),
-					"background_action_active": bool(node_3d.get_meta("background_action_active", false)),
-					"background_action_kind": str(node_3d.get_meta("background_action_kind", "")),
-				}
-		for child in node.get_children():
-			pending.append(child)
+	# 复用按帧缓存的节点表，避免每次调用都全树遍历。
+	for actor_id in _actor_node_map_for_frame():
+		var node_3d := _actor_node_map[actor_id] as Node3D
+		if node_3d == null or not is_instance_valid(node_3d) or node_3d.is_queued_for_deletion():
+			continue
+		output[str(actor_id)] = {
+			"actor_id": actor_id,
+			"node_path": _node_path(node_3d),
+			"node_instance_id": node_3d.get_instance_id(),
+			"node_position": _node_global_position(node_3d),
+			"action_runner_active": bool(node_3d.get_meta("action_runner_active", false)),
+			"action_runner_step_active": bool(node_3d.get_meta("action_runner_step_active", false)),
+			"action_runner_kind": str(node_3d.get_meta("action_runner_kind", "")),
+			"background_action_active": bool(node_3d.get_meta("background_action_active", false)),
+			"background_action_kind": str(node_3d.get_meta("background_action_kind", "")),
+		}
 	return output
 
 

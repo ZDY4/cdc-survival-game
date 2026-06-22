@@ -17,18 +17,26 @@ func drain_turn_action_runner(max_steps: int = 240) -> Dictionary:
 	if host.turn_action_runner == null or not host.turn_action_runner.has_method("snapshot"):
 		return {"active": false, "phase": "missing", "drained": false}
 	var steps := 0
-	var runner: Dictionary = turn_action_runner_snapshot()
-	while steps < max_steps and bool(runner.get("active", false)):
+	# 循环内只轮询廉价状态，避免每步深拷贝整份 snapshot；完整 snapshot 只在结束时构建一次。
+	var status: Dictionary = _runner_drain_status()
+	while steps < max_steps and bool(status.get("active", false)):
 		steps += 1
-		if bool(runner.get("presentation_active", false)) and host.actor_view_controller != null and host.actor_view_controller.has_method("finish_active_actor_presentation"):
-			host.actor_view_controller.call("finish_active_actor_presentation", int(runner.get("presenting_npc_actor_id", runner.get("actor_id", 0))))
+		if bool(status.get("presentation_active", false)) and host.actor_view_controller != null and host.actor_view_controller.has_method("finish_active_actor_presentation"):
+			host.actor_view_controller.call("finish_active_actor_presentation", int(status.get("presenting_npc_actor_id", status.get("actor_id", 0))))
 		if host.turn_action_runner.has_method("process"):
 			host.turn_action_runner.call("process")
-		runner = turn_action_runner_snapshot()
+		status = _runner_drain_status()
+	var runner: Dictionary = turn_action_runner_snapshot()
 	runner["drained"] = not bool(runner.get("active", false))
 	runner["drain_steps"] = steps
 	runner["drain_limit"] = max_steps
 	return runner
+
+
+func _runner_drain_status() -> Dictionary:
+	if host.turn_action_runner != null and host.turn_action_runner.has_method("drain_status"):
+		return dictionary_or_empty(host.turn_action_runner.call("drain_status"))
+	return turn_action_runner_snapshot()
 
 
 func settle_turn_action_runner_boundary(reason: String = "stable_boundary", max_steps: int = 8) -> Dictionary:
@@ -44,18 +52,20 @@ func settle_turn_action_runner_boundary(reason: String = "stable_boundary", max_
 			settled["settled"] = not bool(settled.get("active", false)) and not bool(settled.get("presentation_active", false))
 			return settled
 	var steps := 0
-	var runner: Dictionary = before.duplicate(true)
-	while steps < max_steps and (bool(runner.get("active", false)) or bool(runner.get("presentation_active", false))):
+	# 循环内只轮询廉价状态；完整 snapshot 只在结束时构建一次。
+	var status: Dictionary = _runner_drain_status()
+	while steps < max_steps and (bool(status.get("active", false)) or bool(status.get("presentation_active", false))):
 		steps += 1
-		if bool(runner.get("presentation_active", false)) and host.actor_view_controller != null and host.actor_view_controller.has_method("finish_active_actor_presentation"):
-			host.actor_view_controller.call("finish_active_actor_presentation", int(runner.get("presenting_npc_actor_id", runner.get("actor_id", 0))))
+		if bool(status.get("presentation_active", false)) and host.actor_view_controller != null and host.actor_view_controller.has_method("finish_active_actor_presentation"):
+			host.actor_view_controller.call("finish_active_actor_presentation", int(status.get("presenting_npc_actor_id", status.get("actor_id", 0))))
 		if host.turn_action_runner.has_method("process"):
 			host.turn_action_runner.call("process")
-		runner = turn_action_runner_snapshot()
-		if str(runner.get("phase", "")) == "player_turn_end" or str(runner.get("phase", "")) == "pending_resume":
+		status = _runner_drain_status()
+		if str(status.get("phase", "")) == "player_turn_end" or str(status.get("phase", "")) == "pending_resume":
 			break
-		if bool(runner.get("active", false)) and not bool(runner.get("presentation_active", false)) and not str(runner.get("pending_kind", "")).is_empty():
+		if bool(status.get("active", false)) and not bool(status.get("presentation_active", false)) and not str(status.get("pending_kind", "")).is_empty():
 			break
+	var runner: Dictionary = turn_action_runner_snapshot()
 	runner["settled"] = not bool(runner.get("presentation_active", false))
 	runner["settle_steps"] = steps
 	runner["settle_limit"] = max_steps
