@@ -5,6 +5,9 @@ extends RefCounted
 
 const GridCoord = preload("res://scripts/core/grid/grid_coord.gd")
 
+const AUTO_APPROACH_AP_BUFFER := 2
+const AUTO_APPROACH_TALK_MIN_STEP_BUDGET := 16
+
 
 func begin_interaction_for_runner(simulation: RefCounted, actor_id: int, target: Dictionary, option_id: String, topology: Dictionary) -> Dictionary:
 	var event_start_index: int = simulation.events.size()
@@ -257,6 +260,17 @@ func approach_then_execute_interaction(simulation: RefCounted, actor: RefCounted
 func begin_interaction_approach_for_runner(simulation: RefCounted, actor: RefCounted, target: Dictionary, option_id: String, prompt: Dictionary, topology: Dictionary, event_start_index: int) -> Dictionary:
 	if topology.is_empty():
 		return {"success": false, "reason": "approach_topology_missing", "prompt": prompt}
+	var distance_gate: Dictionary = _auto_approach_distance_gate(actor, prompt)
+	if not bool(distance_gate.get("allowed", true)):
+		return {
+			"success": false,
+			"reason": "approach_too_far",
+			"prompt": prompt,
+			"interaction_range": int(prompt.get("interaction_range", 1)),
+			"target_distance": int(prompt.get("target_distance", -1)),
+			"available_ap": float(actor.ap),
+			"auto_approach_step_budget": int(distance_gate.get("step_budget", 0)),
+		}
 	var approach_goal: Variant = approach_goal_for_prompt(simulation, actor, prompt, topology)
 	if typeof(approach_goal) != TYPE_DICTIONARY:
 		return {
@@ -299,6 +313,25 @@ func begin_interaction_approach_for_runner(simulation: RefCounted, actor: RefCou
 		"pending_interaction": simulation.pending_interaction.duplicate(true),
 		"turn_state": simulation.turn_state.duplicate(true),
 		"events": simulation._events_since(event_start_index),
+	}
+
+
+func _auto_approach_distance_gate(actor: RefCounted, prompt: Dictionary) -> Dictionary:
+	if actor == null:
+		return {"allowed": false, "step_budget": 0}
+	var target: Dictionary = prompt.get("target", {}) if typeof(prompt.get("target", {})) == TYPE_DICTIONARY else {}
+	if str(target.get("target_type", "")) != "actor" or str(prompt.get("primary_option_kind", "")) != "talk":
+		return {"allowed": true, "step_budget": 0}
+	var target_distance: int = int(prompt.get("target_distance", -1))
+	var interaction_range: int = max(0, int(prompt.get("interaction_range", 1)))
+	if target_distance < 0:
+		return {"allowed": true, "step_budget": 0}
+	var required_steps_lower_bound: int = max(0, target_distance - interaction_range)
+	var step_budget: int = max(AUTO_APPROACH_TALK_MIN_STEP_BUDGET, int(floor(float(actor.ap))) + AUTO_APPROACH_AP_BUFFER)
+	return {
+		"allowed": required_steps_lower_bound <= step_budget,
+		"step_budget": step_budget,
+		"required_steps_lower_bound": required_steps_lower_bound,
 	}
 
 
