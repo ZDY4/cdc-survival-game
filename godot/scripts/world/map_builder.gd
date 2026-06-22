@@ -80,6 +80,8 @@ func _collect_objects(topology: MapTopology, objects: Array) -> void:
 			if object_effectively_blocks_sight(object_data):
 				topology.sight_blocking_cells[cell_key] = object_id
 
+		_collect_building_wall_blocking_cells(topology, object_data, object_id)
+
 		var summary: Dictionary = _object_summary(object_data, cells)
 		var door_summary: Dictionary = _door_summary(summary)
 		if not door_summary.is_empty():
@@ -147,17 +149,40 @@ func object_effectively_blocks_sight(object: Dictionary) -> bool:
 	return not _building_has_layout(object)
 
 
+func _collect_building_wall_blocking_cells(topology: MapTopology, object: Dictionary, object_id: String) -> void:
+	if str(object.get("kind", "")) != "building":
+		return
+	var building: Dictionary = _building_props(object)
+	var wall_cells: Array = _array_or_empty(building.get("wall_cells", []))
+	if wall_cells.is_empty():
+		return
+	var anchor: RefCounted = GridCoord.from_dictionary(_dictionary_or_empty(object.get("anchor", {})))
+	for wall_cell in wall_cells:
+		var local_cell: Dictionary = _dictionary_or_empty(wall_cell)
+		if local_cell.is_empty():
+			continue
+		var grid_cell := GridCoord.new(
+			anchor.x + int(local_cell.get("x", 0)),
+			anchor.y,
+			anchor.z + int(local_cell.get("z", 0))
+		)
+		var cell_key: String = grid_cell.key()
+		topology.blocking_cells[cell_key] = object_id
+		topology.sight_blocking_cells[cell_key] = object_id
+
+
 func _door_props(object: Dictionary) -> Dictionary:
 	var props: Dictionary = _dictionary_or_empty(object.get("props", {}))
 	return _dictionary_or_empty(props.get("door", {}))
 
 
-func _building_has_layout(object: Dictionary) -> bool:
+func _building_props(object: Dictionary) -> Dictionary:
 	var props: Dictionary = _dictionary_or_empty(object.get("props", {}))
-	var building: Variant = props.get("building", null)
-	if typeof(building) != TYPE_DICTIONARY:
-		return false
-	return not (building as Dictionary).get("layout", {}).is_empty()
+	return _dictionary_or_empty(props.get("building", {}))
+
+
+func _building_has_layout(object: Dictionary) -> bool:
+	return not _dictionary_or_empty(_building_props(object).get("layout", {})).is_empty()
 
 
 func _object_summary(object: Dictionary, cells: Array[RefCounted]) -> Dictionary:

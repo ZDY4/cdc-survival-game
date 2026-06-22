@@ -7,6 +7,7 @@ const GridCoord = preload("res://scripts/core/grid/grid_coord.gd")
 const MapSceneLoader = preload("res://scripts/world/map_scene_loader.gd")
 const MapBuilder = preload("res://scripts/world/map_builder.gd")
 const WorldSnapshotBuilder = preload("res://scripts/world/world_snapshot_builder.gd")
+const Pathfinder = preload("res://scripts/core/movement/pathfinder.gd")
 const EXPECTED_PLAYER_MODEL_ASSET := "characters/sprite_rigs/default_humanoid.tscn"
 
 
@@ -31,6 +32,7 @@ func _init() -> void:
 	errors.append_array(_validate_legacy_actor_appearance_fill(builder, runtime_snapshot))
 	errors.append_array(_validate_map_scene_failure_reasons(builder, runtime_snapshot))
 	errors.append_array(_validate_door_topology_and_runtime())
+	errors.append_array(_validate_building_wall_topology(world_result))
 	if not errors.is_empty():
 		for error in errors:
 			printerr(error)
@@ -207,6 +209,69 @@ func _validate_door_topology_and_runtime() -> Array[String]:
 	if not bool(_dictionary_or_empty(open_target.get("door", {})).get("is_open", false)):
 		errors.append("door interaction target should reflect open runtime state")
 	return errors
+
+
+func _validate_building_wall_topology(world_result: Dictionary) -> Array[String]:
+	var errors: Array[String] = []
+	var map_builder := MapBuilder.new()
+	var building_map := {
+		"id": "building_wall_smoke_map",
+		"name": "Building Wall Smoke Map",
+		"size": {"width": 5, "height": 5},
+		"default_level": 0,
+		"objects": [{
+			"object_id": "building_wall_smoke",
+			"kind": "building",
+			"anchor": {"x": 1, "y": 0, "z": 1},
+			"footprint": {"width": 3, "height": 2},
+			"rotation": "north",
+			"props": {
+				"building": {
+					"layout": {"generator": "smoke"},
+					"wall_cells": [{"x": 1, "z": 0}]
+				}
+			}
+		}],
+	}
+	var topology: RefCounted = map_builder.build_from_definition(building_map)
+	var map_snapshot: Dictionary = topology.to_dictionary()
+	var blocking: Dictionary = _dictionary_or_empty(map_snapshot.get("blocking_cells", {}))
+	if not blocking.has("2:0:1"):
+		errors.append("building wall_cells should block movement at world cell 2:0:1")
+	if blocking.has("1:0:1") or blocking.has("3:0:1") or blocking.has("1:0:2") or blocking.has("2:0:2") or blocking.has("3:0:2"):
+		errors.append("building layout should not block its whole footprint when wall_cells are present")
+	var sight_blocking: Dictionary = _dictionary_or_empty(map_snapshot.get("sight_blocking_cells", {}))
+	if not sight_blocking.has("2:0:1"):
+		errors.append("building wall_cells should block sight at world cell 2:0:1")
+	var path_result: Dictionary = Pathfinder.new().find_path(
+		GridCoord.new(2, 0, 0),
+		GridCoord.new(2, 0, 1),
+		map_snapshot
+	)
+	if bool(path_result.get("success", false)) or str(path_result.get("reason", "")) != "goal_blocked":
+		errors.append("pathfinder should reject a building wall target: %s" % JSON.stringify(path_result))
+
+	var real_map: Dictionary = _dictionary_or_empty(world_result.get("map", {}))
+	var real_blocking: Dictionary = _dictionary_or_empty(real_map.get("blocking_cells", {}))
+	if not real_blocking.has("20:0:33"):
+		errors.append("survivor_outpost_01 gatehouse wall should contribute blocking cell 20:0:33")
+	var scene_result: Dictionary = MapSceneLoader.new().load_map_definition("survivor_outpost_01")
+	if not bool(scene_result.get("ok", false)):
+		errors.append("survivor_outpost_01 scene should load for building wall export smoke")
+		return errors
+	var gatehouse: Dictionary = _object_by_id(_array_or_empty(_dictionary_or_empty(scene_result.get("data", {})).get("objects", [])), "survivor_outpost_01_gatehouse")
+	var building_props: Dictionary = _dictionary_or_empty(_dictionary_or_empty(gatehouse.get("props", {})).get("building", {}))
+	if _array_or_empty(building_props.get("wall_cells", [])).is_empty():
+		errors.append("survivor_outpost_01 gatehouse should export building wall_cells from visual tiles")
+	return errors
+
+
+func _object_by_id(objects: Array, object_id: String) -> Dictionary:
+	for object_value in objects:
+		var object_data: Dictionary = _dictionary_or_empty(object_value)
+		if str(object_data.get("object_id", "")) == object_id:
+			return object_data
+	return {}
 
 
 func _digest(world_result: Dictionary) -> Dictionary:

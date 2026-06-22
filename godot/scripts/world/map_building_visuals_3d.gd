@@ -37,6 +37,21 @@ func get_cells() -> Array[Vector2i]:
 	return cells
 
 
+func get_blocking_cells() -> Array[Vector2i]:
+	var cells_by_key: Dictionary = {}
+	for child in get_children():
+		var tile := child as Node3D
+		if tile == null or not _is_blocking_tile(tile):
+			continue
+		var cell := Vector2i(int(round(tile.position.x)), int(round(tile.position.z)))
+		cells_by_key[_cell_key(cell)] = cell
+	var cells: Array[Vector2i] = []
+	for key in cells_by_key.keys():
+		cells.append(cells_by_key[key])
+	cells.sort()
+	return cells
+
+
 func get_tiles_at_cell(cell: Vector2i) -> Array[Node3D]:
 	var key := _cell_key(cell)
 	if not _tiles_by_cell.has(key):
@@ -83,6 +98,14 @@ func _is_building_tile(node: Node3D) -> bool:
 	if node.scene_file_path.begins_with(BUILDING_TILE_PATH_PREFIX):
 		return true
 	return str(node.name).begins_with("building_wall_")
+
+
+func _is_blocking_tile(node: Node3D) -> bool:
+	if not _is_building_tile(node):
+		return false
+	var scene_path := node.scene_file_path
+	var node_name := str(node.name)
+	return not scene_path.contains("/floor") and not node_name.contains("_floor")
 
 
 func _node3d_array(value: Variant) -> Array[Node3D]:
