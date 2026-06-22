@@ -31,13 +31,12 @@ func apply_interaction_execution_result(result: Dictionary, executed_target: Dic
 	var followup: Dictionary = dictionary_or_empty(host.interaction_action_controller.call("execution_followup", result, executed_target))
 	host.ui_feedback_state_controller.call("apply_interaction_followup", followup)
 	var stage_panel_to_open := str(followup.get("stage_panel", ""))
-	var needs_world_refresh := interaction_result_needs_final_world_refresh(presentation_result)
-	var final_world_result: Dictionary = build_interaction_final_world_result() if needs_world_refresh else host.world_result.duplicate(true)
+	var final_world_result: Dictionary = build_interaction_final_world_result()
 	var presenter_result: Dictionary = dictionary_or_empty(host.world_action_flow_controller.call("present_result", host, world_container_node(), presentation_result, host.world_result))
 	var presenter_active := bool(presenter_result.get("active", false))
-	if needs_world_refresh and presenter_active:
+	if presenter_active:
 		queue_deferred_world_refresh(final_world_result, dictionary_or_empty(result.get("prompt", {})), presentation_result, "interaction_final_refresh", true)
-	elif needs_world_refresh:
+	else:
 		apply_interaction_final_world_result(final_world_result, presentation_result)
 	var deferred_ui := false
 	if not stage_panel_to_open.is_empty():
@@ -48,29 +47,6 @@ func apply_interaction_execution_result(result: Dictionary, executed_target: Dic
 		host.refresh_hud(dictionary_or_empty(result.get("prompt", {})))
 	else:
 		host.refresh_all_panels(dictionary_or_empty(result.get("prompt", {})))
-
-
-func interaction_result_needs_final_world_refresh(result: Dictionary) -> bool:
-	if result.is_empty():
-		return false
-	if result.has("context_snapshot"):
-		return true
-	if bool(result.get("consumed_target", false)) or bool(result.get("door_toggled", false)):
-		return true
-	if bool(result.get("defeated", false)) or bool(result.get("corpse_created", false)):
-		return true
-	if not dictionary_or_empty(result.get("approach_result", {})).is_empty():
-		return true
-	if not dictionary_or_empty(result.get("pending_movement", {})).is_empty():
-		return true
-	if str(result.get("kind", "")) in ["move", "attack", "attack_required", "scene_transition"]:
-		return true
-	for event_value in interaction_result_events(result):
-		var event: Dictionary = dictionary_or_empty(event_value)
-		match str(event.get("kind", "")):
-			"actor_defeated", "corpse_created", "scene_transition", "door_toggled", "door_auto_opened", "pickup_granted":
-				return true
-	return false
 
 
 func build_interaction_final_world_result() -> Dictionary:
