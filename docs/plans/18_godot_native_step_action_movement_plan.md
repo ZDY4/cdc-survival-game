@@ -47,6 +47,20 @@
 - [ ] `AI` smoke 增加运行时 runner 级覆盖：hostile 追击、hostile 攻击、friendly / neutral 无攻击行动、NPC action queue 逐个表现。
 - [ ] 后续需要重做世界回合行动顺序：当前 `begin_world_turn_for_runner()` / `world_turn_actor_order()` 只是把当前地图上所有非玩家、存活 actor 按 registry / combat turn order 串成一个 NPC 队列，不区分阵营批次。需要评估并引入 `team phase`、阵营优先级或 initiative 规则，使玩家行动后可以按阵营 / 队伍阶段推进，例如玩家阵营行动结束后，阵营 A 全部行动，再阵营 B 行动；同时保留 runner 逐个 NPC action 表现完成后才推进下一动作的约束。
 
+目标分层：
+
+```text
+Player intent / NPC intent
+        ↓
+共享 Action/Command 规则执行
+        ↓
+共享 action result schema
+        ↓
+不同 controller/presenter 负责输入、队列、表现节奏
+```
+
+规则层应尽量统一移动、攻击、交互、AP 消耗、效果和结算结果；玩家与 NPC 的差异主要留在 intent 来源、队列编排、team phase / initiative 调度、表现节奏和 UI / debug 展示层。
+
 性能与调度风险：
 
 - 当前 runner 路径下，`advance_next_npc_turn_for_runner()` 每次调用只会对第一个有效 NPC 执行一次 `_advance_npc_runner_step()` 并返回；`while` 只会在同次调用中跳过死亡、移除或离开当前地图的无效 actor。因此正常 `TurnActionRunner.process()` 不会在同一帧为所有 NPC 执行完整行动。
