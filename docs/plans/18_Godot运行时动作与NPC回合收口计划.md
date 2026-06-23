@@ -1,4 +1,4 @@
-# Godot 原生逐步动作系统剩余工作
+# Godot 运行时动作与 NPC 回合收口计划
 
 本文只保留 `Godot 4.6.3 + GDScript` 逐步动作系统尚未完成或尚未充分验收的工作。已落地的 `TurnActionRunner` 主线、`request_player_*()` facade、移动 begin / step、ActorView 稳定节点、移动中相机跟随 ActorView、runner / actor / camera / render policy snapshot 不再作为待办重复记录。
 
