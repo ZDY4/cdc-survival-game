@@ -97,7 +97,7 @@ func submit_move_command(simulation: RefCounted, actor: RefCounted, command: Dic
 	}
 
 
-func begin_move(simulation: RefCounted, actor_id: int, target_position: Dictionary, topology: Dictionary) -> Dictionary:
+func begin_move(simulation: RefCounted, actor_id: int, target_position: Dictionary, topology: Dictionary, precomputed_plan: Dictionary = {}) -> Dictionary:
 	var actor: RefCounted = simulation.actor_registry.get_actor(actor_id)
 	if actor == null:
 		return {"success": false, "reason": "unknown_actor"}
@@ -107,7 +107,9 @@ func begin_move(simulation: RefCounted, actor_id: int, target_position: Dictiona
 		return {"success": false, "reason": "move_topology_missing"}
 	var goal: RefCounted = GridCoord.from_dictionary(target_position)
 	var movement_topology: Dictionary = simulation._topology_with_auto_open_doors(actor.actor_id, topology)
-	var plan: Dictionary = simulation._pathfinder.find_path(actor.grid_position, goal, movement_topology, simulation._occupied_actor_cells(actor.actor_id))
+	var plan: Dictionary = precomputed_plan.duplicate(true)
+	if plan.is_empty():
+		plan = simulation._pathfinder.find_path(actor.grid_position, goal, movement_topology, simulation._occupied_actor_cells(actor.actor_id))
 	if not bool(plan.get("success", false)):
 		return plan
 	var path: Array = simulation._array_or_empty(plan.get("path", [])).duplicate(true)

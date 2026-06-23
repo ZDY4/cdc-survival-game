@@ -416,7 +416,7 @@ func audio_feedback_snapshot() -> Dictionary:
 
 
 func runtime_performance_snapshot() -> Dictionary:
-	return dictionary_or_empty(host.runtime_performance_tracker.call("snapshot", last_pathfinding_time_ms(), last_pathfinding_visited_cell_count()))
+	return dictionary_or_empty(host.runtime_performance_tracker.call("snapshot", last_pathfinding_result()))
 
 
 func runtime_hover_snapshot() -> Dictionary:
@@ -436,15 +436,19 @@ func update_runtime_performance(delta: float) -> void:
 
 
 func last_pathfinding_time_ms() -> float:
-	var hover: Dictionary = runtime_hover_snapshot()
-	var move_preview: Dictionary = dictionary_or_empty(hover.get("move_preview", {}))
-	return float(move_preview.get("pathfinding_time_ms", 0.0))
+	return float(last_pathfinding_result().get("pathfinding_time_ms", 0.0))
 
 
 func last_pathfinding_visited_cell_count() -> int:
+	return int(last_pathfinding_result().get("visited_cell_count", 0))
+
+
+func last_pathfinding_result() -> Dictionary:
+	var simulation: Variant = host.get("simulation") if host != null else null
+	if simulation != null and simulation.has_method("last_pathfinding_result"):
+		return dictionary_or_empty(simulation.call("last_pathfinding_result"))
 	var hover: Dictionary = runtime_hover_snapshot()
-	var move_preview: Dictionary = dictionary_or_empty(hover.get("move_preview", {}))
-	return int(move_preview.get("visited_cell_count", 0))
+	return dictionary_or_empty(hover.get("move_preview", {}))
 
 
 func dictionary_or_empty(value: Variant) -> Dictionary:

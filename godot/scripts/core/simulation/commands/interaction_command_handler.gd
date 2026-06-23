@@ -196,23 +196,17 @@ func actor_can_reach_interaction(simulation: RefCounted, actor: RefCounted, prom
 func approach_then_execute_interaction(simulation: RefCounted, actor: RefCounted, target: Dictionary, option_id: String, prompt: Dictionary, topology: Dictionary) -> Dictionary:
 	if topology.is_empty():
 		return {"success": false, "reason": "approach_topology_missing", "prompt": prompt}
-	var approach_goal: Variant = approach_goal_for_prompt(simulation, actor, prompt, topology)
-	if typeof(approach_goal) != TYPE_DICTIONARY:
-		return {
-			"success": false,
-			"reason": "approach_target_unreachable",
-			"prompt": prompt,
-			"interaction_range": int(prompt.get("interaction_range", 1)),
-			"target_distance": int(prompt.get("target_distance", -1)),
-		}
-	var approach_plan: Dictionary = simulation._pathfinder.find_path(actor.grid_position, GridCoord.from_dictionary(approach_goal), topology, simulation._occupied_actor_cells(actor.actor_id))
+	var approach_plan: Dictionary = approach_plan_for_prompt(simulation, actor, prompt, topology)
 	if not bool(approach_plan.get("success", false)):
 		return {
 			"success": false,
-			"reason": approach_plan.get("reason", "approach_path_unavailable"),
+			"reason": approach_plan.get("reason", "approach_target_unreachable"),
 			"prompt": prompt,
 			"approach_result": approach_plan,
+			"interaction_range": int(prompt.get("interaction_range", 1)),
+			"target_distance": int(prompt.get("target_distance", -1)),
 		}
+	var approach_goal: Dictionary = simulation._dictionary_or_empty(approach_plan.get("chosen_goal", {})).duplicate(true)
 	simulation.pending_movement = {
 		"actor_id": actor.actor_id,
 		"target_position": approach_goal.duplicate(true),
@@ -257,15 +251,17 @@ func approach_then_execute_interaction(simulation: RefCounted, actor: RefCounted
 func begin_interaction_approach_for_runner(simulation: RefCounted, actor: RefCounted, target: Dictionary, option_id: String, prompt: Dictionary, topology: Dictionary, event_start_index: int) -> Dictionary:
 	if topology.is_empty():
 		return {"success": false, "reason": "approach_topology_missing", "prompt": prompt}
-	var approach_goal: Variant = approach_goal_for_prompt(simulation, actor, prompt, topology)
-	if typeof(approach_goal) != TYPE_DICTIONARY:
+	var approach_plan: Dictionary = approach_plan_for_prompt(simulation, actor, prompt, topology)
+	if not bool(approach_plan.get("success", false)):
 		return {
 			"success": false,
-			"reason": "approach_target_unreachable",
+			"reason": approach_plan.get("reason", "approach_target_unreachable"),
 			"prompt": prompt,
+			"approach_result": approach_plan,
 			"interaction_range": int(prompt.get("interaction_range", 1)),
 			"target_distance": int(prompt.get("target_distance", -1)),
 		}
+	var approach_goal: Dictionary = simulation._dictionary_or_empty(approach_plan.get("chosen_goal", {})).duplicate(true)
 	simulation.pending_interaction = {
 		"actor_id": actor.actor_id,
 		"target": target.duplicate(true),
@@ -273,7 +269,7 @@ func begin_interaction_approach_for_runner(simulation: RefCounted, actor: RefCou
 		"after_movement": true,
 		"runner_step_mode": true,
 	}
-	var begin: Dictionary = simulation.begin_move(actor.actor_id, approach_goal, topology)
+	var begin: Dictionary = simulation.begin_move(actor.actor_id, approach_goal, topology, approach_plan)
 	if not bool(begin.get("success", false)):
 		simulation.pending_interaction.clear()
 		begin["prompt"] = prompt
@@ -303,9 +299,17 @@ func begin_interaction_approach_for_runner(simulation: RefCounted, actor: RefCou
 
 
 func approach_goal_for_prompt(simulation: RefCounted, actor: RefCounted, prompt: Dictionary, topology: Dictionary) -> Variant:
+	var plan: Dictionary = approach_plan_for_prompt(simulation, actor, prompt, topology)
+	if not bool(plan.get("success", false)):
+		return null
+	return simulation._dictionary_or_empty(plan.get("chosen_goal", {})).duplicate(true)
+
+
+func approach_plan_for_prompt(simulation: RefCounted, actor: RefCounted, prompt: Dictionary, topology: Dictionary) -> Dictionary:
 	var target: Dictionary = simulation._dictionary_or_empty(prompt.get("target", {}))
 	var interaction_range: int = max(0, int(prompt.get("interaction_range", 1)))
 	var candidates: Array[RefCounted] = []
+	var movement_topology: Dictionary = simulation._topology_with_auto_open_doors(actor.actor_id, topology)
 	match str(target.get("target_type", "")):
 		"actor":
 			var target_actor: RefCounted = simulation.actor_registry.get_actor(int(target.get("actor_id", 0)))
@@ -317,18 +321,16 @@ func approach_goal_for_prompt(simulation: RefCounted, actor: RefCounted, prompt:
 				candidates.append_array(interaction_goals(simulation, cell_coord, interaction_range))
 			if candidates.is_empty():
 				candidates = interaction_goals(simulation, GridCoord.from_dictionary(simulation._dictionary_or_empty(target.get("anchor", {}))), interaction_range)
-	var best_plan: Dictionary = {}
-	var best_goal: RefCounted = null
-	for goal in candidates:
-		var plan: Dictionary = simulation._pathfinder.find_path(actor.grid_position, goal, topology, simulation._occupied_actor_cells(actor.actor_id))
-		if not bool(plan.get("success", false)):
-			continue
-		if best_plan.is_empty() or int(plan.get("steps", 999999)) < int(best_plan.get("steps", 999999)):
-			best_plan = plan
-			best_goal = goal
-	if best_goal == null:
-		return null
-	return best_goal.to_dictionary()
+	if candidates.is_empty():
+		return {
+			"success": false,
+			"reason": "approach_target_unreachable",
+			"goal_count": 0,
+		}
+	var plan: Dictionary = simulation._pathfinder.find_path_to_any(actor.grid_position, candidates, movement_topology, simulation._occupied_actor_cells(actor.actor_id))
+	if not bool(plan.get("success", false)) and str(plan.get("reason", "")) == "path_unreachable":
+		plan["reason"] = "approach_target_unreachable"
+	return plan
 
 
 func interaction_goals(_simulation: RefCounted, center: RefCounted, interaction_range: int) -> Array[RefCounted]:

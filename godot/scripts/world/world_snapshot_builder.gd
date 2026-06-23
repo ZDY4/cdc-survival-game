@@ -31,6 +31,7 @@ func build_from_runtime_snapshot(runtime_snapshot: Dictionary) -> Dictionary:
 	var corpses: Array[Dictionary] = _corpses_on_map(runtime_snapshot.get("corpse_containers", []), map_id)
 	_apply_corpse_interaction_targets(map_snapshot, corpses)
 	_apply_container_session_states(map_snapshot, runtime_snapshot.get("container_sessions", []), _active_container_actor_ids(runtime_snapshot.get("actors", [])))
+	map_snapshot["topology_revision"] = _topology_revision(map_id, runtime_snapshot, map_snapshot)
 	var actors: Array[Dictionary] = _actors_on_map(runtime_snapshot.get("actors", []), map_id)
 	_apply_actor_quest_markers(actors, runtime_snapshot)
 	_apply_actor_combat_feedback(actors, runtime_snapshot)
@@ -75,6 +76,18 @@ func _actors_on_map(actors: Array, active_map_id: String) -> Array[Dictionary]:
 			"grid_position": actor.get("grid_position", {}),
 		})
 	return output
+
+
+func _topology_revision(map_id: String, runtime_snapshot: Dictionary, map_snapshot: Dictionary) -> String:
+	return "%s:%d:%d:%d:%d:%d:%d" % [
+		map_id,
+		hash(runtime_snapshot.get("door_states", [])),
+		hash(runtime_snapshot.get("consumed_interaction_targets", [])),
+		hash(runtime_snapshot.get("container_sessions", [])),
+		hash(runtime_snapshot.get("corpse_containers", [])),
+		int(map_snapshot.get("blocking_cell_count", 0)),
+		int(map_snapshot.get("interaction_targets", {}).size() if typeof(map_snapshot.get("interaction_targets", {})) == TYPE_DICTIONARY else 0),
+	]
 
 
 func _actor_life_status(actor: Dictionary) -> Dictionary:

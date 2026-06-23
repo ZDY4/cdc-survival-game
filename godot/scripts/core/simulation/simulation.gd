@@ -395,6 +395,12 @@ func preview_move(actor_id: int, target_position: Dictionary, topology: Dictiona
 	return _movement_command_handler.preview_move(self, actor_id, target_position, topology)
 
 
+func last_pathfinding_result() -> Dictionary:
+	if _pathfinder == null or not _pathfinder.has_method("last_result"):
+		return {}
+	return _pathfinder.last_result()
+
+
 func equip_item(actor_id: int, item_id: String, target_slot: String, item_library: Dictionary) -> Dictionary:
 	return _equipment_runner.equip_item(self, _equipment_rules, actor_id, item_id, target_slot, item_library)
 
@@ -661,8 +667,8 @@ func _submit_move_command(actor: RefCounted, command: Dictionary) -> Dictionary:
 	return _movement_command_handler.submit_move_command(self, actor, command)
 
 
-func begin_move(actor_id: int, target_position: Dictionary, topology: Dictionary) -> Dictionary:
-	return _movement_command_handler.begin_move(self, actor_id, target_position, topology)
+func begin_move(actor_id: int, target_position: Dictionary, topology: Dictionary, precomputed_plan: Dictionary = {}) -> Dictionary:
+	return _movement_command_handler.begin_move(self, actor_id, target_position, topology, precomputed_plan)
 
 
 func step_move(actor_id: int, topology: Dictionary) -> Dictionary:
@@ -1912,19 +1918,12 @@ func _npc_approach(actor: RefCounted, target_actor_id: int, topology: Dictionary
 	if target == null:
 		return {"success": false, "reason": "unknown_target", "actor_id": actor.actor_id}
 	var goals: Array[RefCounted] = _adjacent_goals(target.grid_position)
-	var best_plan: Dictionary = {}
-	var best_goal: RefCounted = null
 	var attempted_goals: Array[Dictionary] = []
 	var movement_topology: Dictionary = _topology_with_auto_open_doors(actor.actor_id, topology)
-	for goal in goals:
-		var plan: Dictionary = _pathfinder.find_path(actor.grid_position, goal, movement_topology, _occupied_actor_cells(actor.actor_id))
-		attempted_goals.append(_npc_approach_attempt_summary(goal, plan))
-		if not bool(plan.get("success", false)):
-			continue
-		if best_plan.is_empty() or int(plan.get("steps", 999999)) < int(best_plan.get("steps", 999999)):
-			best_plan = plan
-			best_goal = goal
-	if best_goal == null:
+	var best_plan: Dictionary = _pathfinder.find_path_to_any(actor.grid_position, goals, movement_topology, _occupied_actor_cells(actor.actor_id))
+	var chosen_goal_data: Dictionary = _dictionary_or_empty(best_plan.get("chosen_goal", {}))
+	attempted_goals.append(_npc_approach_attempt_summary(GridCoord.from_dictionary(chosen_goal_data) if not chosen_goal_data.is_empty() else null, best_plan))
+	if not bool(best_plan.get("success", false)):
 		return {
 			"success": false,
 			"reason": "npc_no_adjacent_path",
@@ -1934,6 +1933,7 @@ func _npc_approach(actor: RefCounted, target_actor_id: int, topology: Dictionary
 			"attempted_goals": attempted_goals,
 			"attempted_goal_count": attempted_goals.size(),
 		}
+	var best_goal: RefCounted = GridCoord.from_dictionary(_dictionary_or_empty(best_plan.get("chosen_goal", {})))
 	var path: Array = _array_or_empty(best_plan.get("path", []))
 	if path.size() <= 1:
 		return {
@@ -1980,9 +1980,18 @@ func _npc_approach_attempt_summary(goal: RefCounted, plan: Dictionary) -> Dictio
 		"goal": goal.to_dictionary() if goal != null else {},
 		"success": bool(plan.get("success", false)),
 		"reason": str(plan.get("reason", "ok" if bool(plan.get("success", false)) else "unknown")),
+		"algorithm": str(plan.get("algorithm", "")),
 		"steps": int(plan.get("steps", 0)),
+		"goal_count": int(plan.get("goal_count", 0)),
 		"visited_cell_count": int(plan.get("visited_cell_count", 0)),
+		"expanded_cell_count": int(plan.get("expanded_cell_count", 0)),
+		"max_frontier_size": int(plan.get("max_frontier_size", 0)),
 		"pathfinding_time_ms": float(plan.get("pathfinding_time_ms", 0.0)),
+		"cache_hit": bool(plan.get("cache_hit", false)),
+		"budget_exceeded": bool(plan.get("budget_exceeded", false)),
+		"over_profiler_budget": bool(plan.get("over_profiler_budget", false)),
+		"search_call_count": int(plan.get("search_call_count", 0)),
+		"search_execution_count": int(plan.get("search_execution_count", 0)),
 	}
 	for key in ["blocker", "bounds", "start", "goal", "start_level", "goal_level"]:
 		if plan.has(key):

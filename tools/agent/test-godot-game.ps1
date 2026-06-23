@@ -51,6 +51,7 @@ param(
         "Scene",
         "Overworld",
         "Movement",
+        "Pathfinding",
         "Vision",
         "AI",
         "Interaction",
@@ -112,6 +113,7 @@ $scenarioScripts = [ordered]@{
     Scene             = "res://scripts/tools/scene_smoke.gd"
     Overworld         = "res://scripts/tools/overworld_smoke.gd"
     Movement          = "res://scripts/tools/movement_smoke.gd"
+    Pathfinding       = "res://scripts/tools/pathfinding_smoke.gd"
     Vision            = "res://scripts/tools/vision_smoke.gd"
     AI                = "res://scripts/tools/ai_smoke.gd"
     Interaction       = "res://scripts/tools/interaction_smoke.gd"

@@ -933,18 +933,11 @@ func npc_move_to_life_target(simulation: RefCounted, actor: RefCounted, target_g
 	var candidates: Array[RefCounted] = [target_coord]
 	if simulation._occupied_actor_cells(actor.actor_id).has(target_coord.key()):
 		candidates.append_array(simulation._adjacent_goals(target_coord))
-	var best_plan: Dictionary = {}
-	var best_goal: RefCounted = null
 	var attempted_goals: Array[Dictionary] = []
-	for goal in candidates:
-		var plan: Dictionary = simulation._pathfinder.find_path(actor.grid_position, goal, movement_topology, simulation._occupied_actor_cells(actor.actor_id))
-		attempted_goals.append(simulation._npc_approach_attempt_summary(goal, plan))
-		if not bool(plan.get("success", false)):
-			continue
-		if best_plan.is_empty() or int(plan.get("steps", 999999)) < int(best_plan.get("steps", 999999)):
-			best_plan = plan
-			best_goal = goal
-	if best_goal == null:
+	var best_plan: Dictionary = simulation._pathfinder.find_path_to_any(actor.grid_position, candidates, movement_topology, simulation._occupied_actor_cells(actor.actor_id))
+	var chosen_goal_data: Dictionary = simulation._dictionary_or_empty(best_plan.get("chosen_goal", {}))
+	attempted_goals.append(simulation._npc_approach_attempt_summary(GridCoord.from_dictionary(chosen_goal_data) if not chosen_goal_data.is_empty() else null, best_plan))
+	if not bool(best_plan.get("success", false)):
 		return {
 			"success": false,
 			"actor_id": actor.actor_id,
@@ -955,6 +948,7 @@ func npc_move_to_life_target(simulation: RefCounted, actor: RefCounted, target_g
 			"attempted_goal_count": attempted_goals.size(),
 			"life_intent": intent.duplicate(true),
 		}
+	var best_goal: RefCounted = GridCoord.from_dictionary(simulation._dictionary_or_empty(best_plan.get("chosen_goal", {})))
 	var path: Array = simulation._array_or_empty(best_plan.get("path", []))
 	if path.size() <= 1:
 		var already_result := {

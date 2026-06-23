@@ -32,7 +32,7 @@ func record_world_render(counts: Dictionary, world_root: Node) -> void:
 		render_sequence += 1
 
 
-func snapshot(pathfinding_time_ms: float, pathfinding_visited_cell_count: int) -> Dictionary:
+func snapshot(pathfinding_result: Dictionary) -> Dictionary:
 	var now_msec: int = Time.get_ticks_msec()
 	var resolved_fps := fps
 	if resolved_fps <= 0.0:
@@ -40,11 +40,22 @@ func snapshot(pathfinding_time_ms: float, pathfinding_visited_cell_count: int) -
 	if resolved_fps <= 0.0:
 		resolved_fps = 60.0
 	var rendered_object_count := _rendered_object_count(last_render_counts)
+	var pathfinding: Dictionary = _dictionary_or_empty(pathfinding_result)
 	return {
 		"fps": resolved_fps,
 		"frame_time_ms": frame_time_ms,
-		"pathfinding_time_ms": pathfinding_time_ms,
-		"pathfinding_visited_cell_count": pathfinding_visited_cell_count,
+		"pathfinding_time_ms": float(pathfinding.get("pathfinding_time_ms", 0.0)),
+		"pathfinding_visited_cell_count": int(pathfinding.get("visited_cell_count", 0)),
+		"pathfinding_expanded_cell_count": int(pathfinding.get("expanded_cell_count", 0)),
+		"pathfinding_max_frontier_size": int(pathfinding.get("max_frontier_size", 0)),
+		"pathfinding_algorithm": str(pathfinding.get("algorithm", "")),
+		"pathfinding_goal_count": int(pathfinding.get("goal_count", 0)),
+		"pathfinding_cache_hit": bool(pathfinding.get("cache_hit", false)),
+		"pathfinding_budget_exceeded": bool(pathfinding.get("budget_exceeded", false)),
+		"pathfinding_over_profiler_budget": bool(pathfinding.get("over_profiler_budget", false)),
+		"pathfinding_profiler_budget_ms": float(pathfinding.get("profiler_budget_ms", 0.0)),
+		"pathfinding_search_call_count": int(pathfinding.get("search_call_count", 0)),
+		"pathfinding_search_execution_count": int(pathfinding.get("search_execution_count", 0)),
 		"last_process_tick_msec": last_process_tick_msec,
 		"last_hud_refresh_tick_msec": last_hud_refresh_tick_msec,
 		"hud_latency_ms": max(0, now_msec - last_hud_refresh_tick_msec) if last_hud_refresh_tick_msec > 0 else 0,
