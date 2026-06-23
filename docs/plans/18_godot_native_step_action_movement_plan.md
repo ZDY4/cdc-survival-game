@@ -47,12 +47,21 @@
 - [ ] `AI` smoke 增加运行时 runner 级覆盖：hostile 追击、hostile 攻击、friendly / neutral 无攻击行动、NPC action queue 逐个表现。
 - [ ] 后续需要重做世界回合行动顺序：当前 `begin_world_turn_for_runner()` / `world_turn_actor_order()` 只是把当前地图上所有非玩家、存活 actor 按 registry / combat turn order 串成一个 NPC 队列，不区分阵营批次。需要评估并引入 `team phase`、阵营优先级或 initiative 规则，使玩家行动后可以按阵营 / 队伍阶段推进，例如玩家阵营行动结束后，阵营 A 全部行动，再阵营 B 行动；同时保留 runner 逐个 NPC action 表现完成后才推进下一动作的约束。
 
+性能与调度风险：
+
+- 当前 runner 路径下，`advance_next_npc_turn_for_runner()` 每次调用只会对第一个有效 NPC 执行一次 `_advance_npc_runner_step()` 并返回；`while` 只会在同次调用中跳过死亡、移除或离开当前地图的无效 actor。因此正常 `TurnActionRunner.process()` 不会在同一帧为所有 NPC 执行完整行动。
+- 单个 NPC step 仍可能在一帧内变重，尤其是寻路、GOAP / life planner、战斗目标选择、可见性衰减和攻击结算；NPC 数量增加时，完整世界回合会跨很多帧完成，可能造成玩家等待时间过长。
+- `advance_world_turn()` 批处理路径仍会一次同步推进当前地图上所有非玩家 actor；后续需要明确它只用于 headless / 规则 smoke / 离线粗粒度模拟，避免 runtime 表现路径误用批处理推进。
+- 世界回合队列需要引入 online active set / interest management：只让当前地图、玩家附近、战斗相关、剧情激活或需要精细表现的 NPC 进入 runner 队列；远处 NPC 走低频 background simulation / settlement life tick，不逐个跑完整 action。
+- 为 NPC step 增加预算与诊断：记录本轮候选 actor 数、入队 actor 数、跳过原因、每个 NPC step 耗时、寻路节点数 / GOAP 计划耗时、跨帧等待帧数，并在 debug snapshot 或 smoke 输出中暴露。
+
 验收：
 
 - 玩家回合结束后，runner 依次经过 `player_turn_end -> npc_action -> npc_presentation -> player_turn_start -> pending_resume`。
 - NPC 每次只展示一个动作表现，表现未结束前不会同步推进后续 NPC 动作。
 - NPC 攻击伤害在 presentation 后 resolve。
 - 新的 world turn order snapshot / debug 信息能暴露当前 `team_phase`、阵营 / 队伍 id、phase 内 actor index 和剩余 actor 数；非战斗和战斗 initiative 两种路径都必须有 smoke 覆盖。
+- 大量 NPC 场景的 smoke / profile 能证明 runner 路径不会单帧同步推进全部 NPC；批处理 `advance_world_turn()` 和 runtime runner 路径的用途边界有测试或诊断覆盖。
 
 ## 4. 交互链路动作化收口
 
