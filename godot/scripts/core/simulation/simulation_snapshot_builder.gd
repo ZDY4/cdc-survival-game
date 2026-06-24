@@ -67,6 +67,27 @@ func build(simulation: RefCounted) -> Dictionary:
 	}
 
 
+## 世界表现层（world_snapshot_builder / fog / debug overlay / 刷新日志）实际消费的精简运行时视图。
+## 只序列化这些消费者读取的字段，避免世界重建时跑整局全量 snapshot()（省掉派生字段的多轮 events 扫描、
+## relationships/ai_intents/hotbar 等无关序列化）。字段值与 build() 中对应项保持一致，故世界产物不变。
+func build_world_runtime_view(simulation: RefCounted) -> Dictionary:
+	return {
+		"active_map_id": simulation.active_map_id,
+		"active_location_id": simulation.active_location_id,
+		"actors": simulation.actor_registry.snapshot(),
+		"events": _derived.serialize_events(simulation),
+		"vision": simulation._vision_rules.snapshot(),
+		"world_time": simulation.world_time.duplicate(true),
+		"door_states": _door_state_snapshots(simulation.door_states),
+		"container_sessions": _container_session_snapshots(simulation.container_sessions),
+		"shop_sessions": _shop_session_snapshots(simulation.shop_sessions),
+		"corpse_containers": _corpse_container_snapshots(simulation.corpse_containers),
+		"consumed_interaction_targets": simulation.consumed_interaction_targets.keys(),
+		"active_quests": _active_quest_snapshots(simulation.active_quests),
+		"completed_quests": simulation.completed_quests.keys(),
+	}
+
+
 func _active_quest_snapshots(active_quests: Dictionary) -> Array[Dictionary]:
 	var output: Array[Dictionary] = []
 	var ids: Array = active_quests.keys()

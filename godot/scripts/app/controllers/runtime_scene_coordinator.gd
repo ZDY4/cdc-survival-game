@@ -151,7 +151,7 @@ func apply_world_root_snapshot(render_world: bool = true) -> Dictionary:
 	setup_world_container()
 	if host.world_root == null:
 		return {}
-	var runtime_snapshot: Dictionary = host.simulation.snapshot() if host.simulation != null else {}
+	var runtime_snapshot: Dictionary = host.simulation.world_runtime_view() if host.simulation != null else {}
 	var apply_result: Dictionary = dictionary_or_empty(host.world_root.call("apply_runtime_snapshot", host.world_result, runtime_snapshot, host.current_debug_overlay_mode(), render_world))
 	var counts: Dictionary = dictionary_or_empty(apply_result.get("counts", {}))
 	if render_world:

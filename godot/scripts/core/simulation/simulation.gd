@@ -531,6 +531,12 @@ func snapshot() -> Dictionary:
 	return _snapshot_builder.build(self)
 
 
+## 世界表现/重建专用的精简运行时视图，只含 3D 渲染与刷新日志实际消费的字段，
+## 避免每次世界重建都跑整局全量 snapshot()。不涉及 hotbar，故无需同步 hotbar 分组。
+func world_runtime_view() -> Dictionary:
+	return _snapshot_builder.build_world_runtime_view(self)
+
+
 func load_snapshot(snapshot_data: Dictionary) -> void:
 	_snapshot_codec.load(self, snapshot_data)
 

@@ -19,7 +19,7 @@ func rebuild_world_result(simulation: RefCounted, interaction_controller: RefCou
 		return {"ok": false, "reason": "registry_missing", "source": source, "world_result": {}}
 	if simulation == null:
 		return {"ok": false, "reason": "simulation_missing", "source": source, "world_result": {}}
-	var runtime_snapshot: Dictionary = simulation.snapshot()
+	var runtime_snapshot: Dictionary = simulation.world_runtime_view()
 	var built: Dictionary = build_world_result_from_snapshot(runtime_snapshot, source)
 	var next_world_result: Dictionary = _dictionary_or_empty(built.get("world_result", {}))
 	var applied: Dictionary = apply_existing_world_result(simulation, interaction_controller, next_world_result, source)
@@ -71,7 +71,7 @@ func apply_existing_world_result(simulation: RefCounted, interaction_controller:
 		"map": _dictionary_or_empty(next_world_result.get("map", {})),
 	}
 	if simulation != null:
-		output["runtime_context"] = _runtime_log_context(simulation.snapshot())
+		output["runtime_context"] = _runtime_log_context(simulation.world_runtime_view())
 	return output
 
 
@@ -92,7 +92,7 @@ func resolve_pending_final_world_result(simulation: RefCounted, pending_refresh:
 			"world_result": final_world_result,
 			"used_fallback": false,
 		}
-	var fallback_refresh: Dictionary = build_world_result_from_snapshot(simulation.snapshot(), fallback_source)
+	var fallback_refresh: Dictionary = build_world_result_from_snapshot(simulation.world_runtime_view(), fallback_source)
 	return {
 		"ok": bool(fallback_refresh.get("ok", false)),
 		"reason": str(fallback_refresh.get("reason", "")),
