@@ -1,13 +1,13 @@
 extends RefCounted
 
 
-static func present(host: Node, actor_view: RefCounted, npc_result: Dictionary) -> Dictionary:
+static func present(host: Node, actor_view: RefCounted, npc_result: Dictionary, options: Dictionary = {}) -> Dictionary:
 	if actor_view == null:
 		return {"success": false, "active": false, "reason": "actor_view_missing"}
 	var attack: Dictionary = attack_from_result(npc_result)
 	if not attack.is_empty():
-		return _present_attack(host, actor_view, npc_result, attack)
-	return _present_move(host, actor_view, npc_result)
+		return _present_attack(host, actor_view, npc_result, attack, options)
+	return _present_move(host, actor_view, npc_result, options)
 
 
 static func attack_from_result(npc_result: Dictionary) -> Dictionary:
@@ -53,7 +53,7 @@ static func move_step_from_result(npc_result: Dictionary) -> Dictionary:
 	return {}
 
 
-static func _present_attack(host: Node, actor_view: RefCounted, npc_result: Dictionary, attack: Dictionary) -> Dictionary:
+static func _present_attack(host: Node, actor_view: RefCounted, npc_result: Dictionary, attack: Dictionary, options: Dictionary = {}) -> Dictionary:
 	if not actor_view.has_method("play_attack"):
 		return {"success": false, "active": false, "reason": "actor_view_attack_missing"}
 	var attacker_id := int(attack.get("actor_id", npc_result.get("actor_id", 0)))
@@ -63,13 +63,14 @@ static func _present_attack(host: Node, actor_view: RefCounted, npc_result: Dict
 	var presentation: Dictionary = _dictionary_or_empty(actor_view.call("play_attack", host, attacker_id, target_actor_id, attack, {
 		"duration_sec": 0.10,
 		"source": "npc_action",
+		"presentation_token": int(options.get("presentation_token", 0)),
 	}))
 	presentation["source"] = "npc_action"
 	presentation["npc_intent"] = "attack"
 	return presentation
 
 
-static func _present_move(host: Node, actor_view: RefCounted, npc_result: Dictionary) -> Dictionary:
+static func _present_move(host: Node, actor_view: RefCounted, npc_result: Dictionary, options: Dictionary = {}) -> Dictionary:
 	if not actor_view.has_method("move_actor_step"):
 		return {"success": false, "active": false, "reason": "actor_view_move_missing"}
 	var step: Dictionary = move_step_from_result(npc_result)
@@ -85,6 +86,7 @@ static func _present_move(host: Node, actor_view: RefCounted, npc_result: Dictio
 	var presentation: Dictionary = _dictionary_or_empty(actor_view.call("move_actor_step", host, actor_id, from_grid, to_grid, {
 		"duration_sec": 0.08,
 		"source": "npc_action",
+		"presentation_token": int(options.get("presentation_token", 0)),
 	}))
 	presentation["source"] = "npc_action"
 	return presentation

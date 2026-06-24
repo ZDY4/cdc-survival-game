@@ -412,6 +412,60 @@ func sync_move_path_preview_with_active_movement(movement_snapshot: Dictionary) 
 	move_path_preview_markers.set_meta("visible_marker_count", _visible_child_count(move_path_preview_markers))
 
 
+func sync_move_path_preview_with_action_queue(queue_snapshot: Dictionary, observed_level: int) -> void:
+	if move_path_preview_markers == null:
+		return
+	if queue_snapshot.is_empty() or not bool(queue_snapshot.get("active", false)):
+		clear_move_path_preview_markers()
+		return
+	var path: Array = _array_or_empty(queue_snapshot.get("remaining_move_path", []))
+	if path.is_empty():
+		clear_move_path_preview_markers()
+		return
+	var signature := "%s|%s|%d" % [
+		str(queue_snapshot.get("queue_id", 0)),
+		str(_dictionary_or_empty(queue_snapshot.get("current_action", {})).get("action_id", 0)),
+		path.size(),
+	]
+	if str(move_path_preview_markers.get_meta("queue_signature", "")) == signature:
+		return
+	clear_move_path_preview_markers()
+	var index := 0
+	for cell in path:
+		var grid: Dictionary = _dictionary_or_empty(cell)
+		if grid.is_empty():
+			continue
+		var marker := _build_move_path_preview_marker(index, path.size())
+		marker.position = Vector3(
+			float(grid.get("x", 0)),
+			float(grid.get("y", observed_level)) + 0.12,
+			float(grid.get("z", 0))
+		)
+		marker.set_meta("grid", grid.duplicate(true))
+		marker.set_meta("path_index", index)
+		marker.set_meta("step_cost", index + 1)
+		marker.set_meta("within_current_ap", true)
+		marker.set_meta("requires_pending", false)
+		marker.set_meta("reachable", true)
+		marker.set_meta("source", "action_queue")
+		move_path_preview_markers.add_child(marker)
+		index += 1
+	move_path_preview_markers.set_meta("queue_signature", signature)
+	move_path_preview_markers.set_meta("marker_count", index)
+	move_path_preview_markers.set_meta("path_length", path.size())
+	move_path_preview_markers.set_meta("reachable", true)
+	move_path_preview_markers.set_meta("reason", "")
+	move_path_preview_markers.set_meta("steps", path.size())
+	move_path_preview_markers.set_meta("ap_cost", float(path.size()))
+	move_path_preview_markers.set_meta("ap_available", float(path.size()))
+	move_path_preview_markers.set_meta("ap_affordable", true)
+	move_path_preview_markers.set_meta("affordable_steps", path.size())
+	move_path_preview_markers.set_meta("requires_pending", false)
+	move_path_preview_markers.set_meta("pending_steps", 0)
+	move_path_preview_markers.set_meta("current_movement_step_index", int(_dictionary_or_empty(queue_snapshot.get("compat", {})).get("completed_steps", 0)))
+	move_path_preview_markers.set_meta("visible_marker_count", index)
+
+
 func update_pending_movement_path_markers(pending: Dictionary, observed_level: int) -> void:
 	if pending_movement_path_markers == null:
 		return

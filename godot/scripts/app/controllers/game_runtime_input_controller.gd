@@ -821,6 +821,13 @@ func _clear_move_path_preview_markers() -> void:
 func _sync_move_path_preview_with_active_movement() -> void:
 	if game_root == null:
 		return
+	if game_root.has_method("turn_action_runner_snapshot"):
+		var runner: Dictionary = _dictionary_or_empty(game_root.turn_action_runner_snapshot())
+		var queue: Dictionary = _dictionary_or_empty(runner.get("queue", {}))
+		if bool(queue.get("active", false)) and not _array_or_empty(queue.get("remaining_move_path", [])).is_empty():
+			queue["compat"] = _dictionary_or_empty(runner.get("compat", {})).duplicate(true)
+			runtime_marker_controller.sync_move_path_preview_with_action_queue(queue, _observed_level())
+			return
 	var presenter: Dictionary = _active_turn_runner_move_snapshot()
 	if presenter.is_empty() and game_root.has_method("world_action_presenter_snapshot"):
 		presenter = _dictionary_or_empty(game_root.world_action_presenter_snapshot())

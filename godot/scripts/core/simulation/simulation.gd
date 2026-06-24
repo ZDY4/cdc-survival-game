@@ -671,6 +671,14 @@ func begin_move(actor_id: int, target_position: Dictionary, topology: Dictionary
 	return _movement_command_handler.begin_move(self, actor_id, target_position, topology, precomputed_plan)
 
 
+func find_path_to_any_for_runner(actor_id: int, goals: Array[RefCounted], topology: Dictionary) -> Dictionary:
+	var actor: RefCounted = actor_registry.get_actor(actor_id)
+	if actor == null:
+		return {"success": false, "reason": "unknown_actor", "actor_id": actor_id}
+	var movement_topology: Dictionary = _topology_with_auto_open_doors(actor_id, topology)
+	return _pathfinder.find_path_to_any(actor.grid_position, goals, movement_topology, _occupied_actor_cells(actor_id))
+
+
 func step_move(actor_id: int, topology: Dictionary) -> Dictionary:
 	return _movement_command_handler.step_move(self, actor_id, topology)
 
@@ -1922,6 +1930,8 @@ func _npc_approach(actor: RefCounted, target_actor_id: int, topology: Dictionary
 	var movement_topology: Dictionary = _topology_with_auto_open_doors(actor.actor_id, topology)
 	var best_plan: Dictionary = _pathfinder.find_path_to_any(actor.grid_position, goals, movement_topology, _occupied_actor_cells(actor.actor_id))
 	var chosen_goal_data: Dictionary = _dictionary_or_empty(best_plan.get("chosen_goal", {}))
+	if chosen_goal_data.is_empty():
+		chosen_goal_data = _dictionary_or_empty(best_plan.get("goal", {}))
 	attempted_goals.append(_npc_approach_attempt_summary(GridCoord.from_dictionary(chosen_goal_data) if not chosen_goal_data.is_empty() else null, best_plan))
 	if not bool(best_plan.get("success", false)):
 		return {

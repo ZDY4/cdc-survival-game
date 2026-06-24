@@ -718,7 +718,20 @@ func _turn_action_runner_control_text(value: Variant) -> String:
 	if not phase.is_empty():
 		label += ":%s" % phase
 	var parts: Array[String] = [label]
-	var step_index := int(runner.get("completed_steps", runner.get("step_index", 0)))
+	var queue: Dictionary = _dictionary_or_empty(runner.get("queue", {}))
+	var queue_current: Dictionary = _dictionary_or_empty(queue.get("current_action", {}))
+	var queue_remaining: Array = _array_or_empty(queue.get("remaining_actions", []))
+	var queue_path: Array = _array_or_empty(queue.get("remaining_move_path", []))
+	if bool(queue.get("active", false)) and not queue_current.is_empty():
+		var queue_kind := str(queue_current.get("kind", ""))
+		if not queue_kind.is_empty():
+			parts.append("Action %s" % queue_kind)
+		if not queue_path.is_empty():
+			parts.append("Remain %d" % queue_path.size())
+		elif queue_remaining.size() > 1:
+			parts.append("Remain %d" % queue_remaining.size())
+	var compat: Dictionary = _dictionary_or_empty(runner.get("compat", {}))
+	var step_index := int(compat.get("completed_steps", runner.get("completed_steps", runner.get("step_index", 0))))
 	var total_steps := int(runner.get("total_steps", 0))
 	var path_length := int(runner.get("path_length", 0))
 	var remaining_steps := int(runner.get("remaining_steps", 0))

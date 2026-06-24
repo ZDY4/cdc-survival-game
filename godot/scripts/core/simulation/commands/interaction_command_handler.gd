@@ -339,7 +339,7 @@ func interaction_goals(_simulation: RefCounted, center: RefCounted, interaction_
 	for dx in range(-resolved_range, resolved_range + 1):
 		for dz in range(-resolved_range, resolved_range + 1):
 			var distance: int = abs(dx) + abs(dz)
-			if distance <= 0 or distance > resolved_range:
+			if distance > resolved_range:
 				continue
 			output.append(GridCoord.new(center.x + dx, center.y, center.z + dz))
 	return output
