@@ -17,6 +17,7 @@
 - `review-godot-map-visual.md`
 - `test-godot-editor.md`
 - `test-godot-game.md`
+- `test-godot-profile.md`
 - `test-godot-static.md`
 
 ## General Rules
@@ -61,6 +62,8 @@
 - `pwsh -NoProfile -File tools/agent/test-godot-editor.ps1 -Scenario All`
 - `pwsh -NoProfile -File tools/agent/test-godot-game.ps1`
 - `pwsh -NoProfile -File tools/agent/test-godot-game.ps1 -Scenario All`
+- `pwsh -NoProfile -File tools/agent/test-godot-profile.ps1`
+- `pwsh -NoProfile -File tools/agent/test-godot-profile.ps1 -Scenario MovementClickRepeat -Iterations 30`
 
 ## Editor Handoff
 
@@ -85,6 +88,8 @@
 - `pwsh -NoProfile -File tools/agent/test-godot-game.ps1 -Scenario All`
 
 运行时/游戏闭环优先跑 `test-godot-game.ps1`。
+
+运行时性能趋势和函数耗时 profiling 优先跑 `test-godot-profile.ps1`。
 
 Godot editor 复核优先跑 `test-godot-editor.ps1`。
 
