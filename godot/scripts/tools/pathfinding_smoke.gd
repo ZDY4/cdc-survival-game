@@ -5,6 +5,7 @@ const Pathfinder = preload("res://scripts/core/movement/pathfinder.gd")
 const ContentRegistry = preload("res://scripts/data/content_registry.gd")
 const CoreRuntimeBootstrap = preload("res://scripts/core/runtime/runtime_bootstrap.gd")
 const WorldSnapshotBuilder = preload("res://scripts/world/world_snapshot_builder.gd")
+const RuntimeRefreshController = preload("res://scripts/app/controllers/runtime_refresh_controller.gd")
 
 
 func _init() -> void:
@@ -119,6 +120,7 @@ func _run_checks() -> Array[String]:
 		errors.append("budgeted pathfinding failure should report budget_exceeded")
 	elif int(budgeted.get("visited_cell_count", 0)) < budgeted_pathfinder.max_visited_cells:
 		errors.append("budgeted pathfinding should report visited count at the limit")
+	errors.append_array(_expect_runtime_refresh_prepares_native_grid())
 	errors.append_array(_expect_far_npc_interaction_approach())
 	errors.append_array(_expect_far_map_object_interaction_approach())
 	return errors
@@ -157,6 +159,34 @@ func _expect_native_grid_reuse_with_dynamic_occupancy() -> Array[String]:
 		errors.append("cleared dynamic occupancy should reopen the cached native grid: %s" % JSON.stringify(changed_goal_result))
 	if int(changed_goal_result.get("native_grid_build_count", 0)) != first_build_count:
 		errors.append("clearing dynamic occupancy should not rebuild the native grid")
+	return errors
+
+
+func _expect_runtime_refresh_prepares_native_grid() -> Array[String]:
+	var errors: Array[String] = []
+	var registry := ContentRegistry.new()
+	var load_result = registry.load_all()
+	if load_result.has_errors():
+		return ["pathfinding smoke could not load registry for refresh prepare"]
+	var simulation: RefCounted = CoreRuntimeBootstrap.new(registry).build_new_game_runtime().get("simulation")
+	var world_result: Dictionary = WorldSnapshotBuilder.new(registry).build_from_runtime_snapshot(simulation.world_runtime_view())
+	var refresh: Dictionary = RuntimeRefreshController.new(registry).apply_existing_world_result(simulation, null, world_result, "pathfinding_prepare_smoke")
+	var prepare: Dictionary = _dictionary_or_empty(refresh.get("pathfinding_prepare", {}))
+	if not bool(prepare.get("prepared", false)):
+		errors.append("runtime refresh should prepare native pathfinding grid: %s" % JSON.stringify(refresh))
+	var build_count: int = int(prepare.get("native_grid_build_count", 0))
+	if build_count != 1:
+		errors.append("runtime refresh should build native grid once before first path query, got %d" % build_count)
+	var player: RefCounted = simulation.actor_registry.get_actor(1)
+	if player != null:
+		player.grid_position = GridCoord.new(24, 0, 39)
+	var topology: Dictionary = _dictionary_or_empty(world_result.get("map", {}))
+	var preview: Dictionary = simulation.preview_move(1, {"x": 25, "y": 0, "z": 39}, topology)
+	if not bool(preview.get("success", false)):
+		errors.append("prepared native grid should still support move preview: %s" % JSON.stringify(preview))
+	var last_path: Dictionary = simulation.last_pathfinding_result()
+	if int(last_path.get("native_grid_build_count", 0)) != build_count:
+		errors.append("first path query after runtime refresh should reuse prepared native grid")
 	return errors
 
 
@@ -237,3 +267,9 @@ func _open_topology() -> Dictionary:
 		"blocking_cells": {},
 		"blocking_cell_count": 0,
 	}
+
+
+func _dictionary_or_empty(value: Variant) -> Dictionary:
+	if typeof(value) == TYPE_DICTIONARY:
+		return value
+	return {}

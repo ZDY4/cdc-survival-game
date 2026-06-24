@@ -59,9 +59,11 @@ func apply_existing_world_result(simulation: RefCounted, interaction_controller:
 			"error": str(next_world_result.get("error", "world refresh failed")),
 			"world_result": next_world_result,
 		}
+	var pathfinding_prepare: Dictionary = {}
 	if simulation != null:
 		var map: Dictionary = _dictionary_or_empty(next_world_result.get("map", {}))
 		simulation.configure_map_interactions(_dictionary_or_empty(map.get("interaction_targets", {})))
+		pathfinding_prepare = _prepare_pathfinding_grid(simulation, map)
 	if interaction_controller != null:
 		interaction_controller.world_result = next_world_result
 	var output := {
@@ -71,6 +73,7 @@ func apply_existing_world_result(simulation: RefCounted, interaction_controller:
 		"map": _dictionary_or_empty(next_world_result.get("map", {})),
 	}
 	if simulation != null:
+		output["pathfinding_prepare"] = pathfinding_prepare
 		output["runtime_context"] = _runtime_log_context(simulation.world_runtime_view())
 	return output
 
@@ -246,6 +249,15 @@ func _record_refresh_report(accepted: Dictionary) -> void:
 		"world_minute": int(context.get("world_minute", 0)),
 		"error_message": str(accepted.get("error_message", "")),
 	}
+
+
+func _prepare_pathfinding_grid(simulation: RefCounted, map: Dictionary) -> Dictionary:
+	if simulation == null or map.is_empty():
+		return {"prepared": false, "reason": "map_missing"}
+	var pathfinder: Variant = simulation.get("_pathfinder")
+	if pathfinder == null or not pathfinder.has_method("prepare_native_grid"):
+		return {"prepared": false, "reason": "pathfinder_missing"}
+	return _dictionary_or_empty(pathfinder.call("prepare_native_grid", map))
 
 
 func _runtime_log_context(runtime_snapshot: Dictionary) -> Dictionary:

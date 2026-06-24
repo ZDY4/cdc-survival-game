@@ -141,6 +141,28 @@ func clear_cache() -> void:
 	_native_grid_cache_order.clear()
 
 
+func prepare_native_grid(topology: Dictionary) -> Dictionary:
+	if not native_grid_enabled:
+		return {"prepared": false, "reason": "native_grid_disabled"}
+	var bounds: Dictionary = _dictionary_or_empty(topology.get("bounds", {}))
+	if bounds.is_empty():
+		return {"prepared": false, "reason": "bounds_missing"}
+	var min_x: int = int(bounds.get("min_x", 0))
+	var max_x: int = int(bounds.get("max_x", 0))
+	var min_z: int = int(bounds.get("min_z", 0))
+	var max_z: int = int(bounds.get("max_z", 0))
+	var before_build_count := native_grid_build_count
+	var grid_state: Dictionary = _native_grid_state(topology, min_x, max_x, min_z, max_z)
+	if grid_state.is_empty() or grid_state.get("astar") == null:
+		return {"prepared": false, "reason": "native_grid_build_failed"}
+	_sync_native_dynamic_solids(grid_state, {})
+	return {
+		"prepared": true,
+		"cache_hit": native_grid_build_count == before_build_count,
+		"native_grid_build_count": native_grid_build_count,
+	}
+
+
 func last_result() -> Dictionary:
 	return _last_result.duplicate(true)
 
