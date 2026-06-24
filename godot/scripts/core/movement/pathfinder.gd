@@ -20,6 +20,7 @@ const DEFAULT_MAX_VISITED_CELLS := 2048
 const DEFAULT_TIME_BUDGET_MS := 8.0
 const MAX_CACHE_ENTRIES := 64
 const MAX_PACKED_BLOCKING_CACHE_ENTRIES := 16
+const MAX_NATIVE_GRID_CACHE_ENTRIES := 8
 const GOAL_ISLAND_PROBE_LIMIT := 16
 
 var max_visited_cells: int = DEFAULT_MAX_VISITED_CELLS
@@ -31,9 +32,12 @@ var _cache: Dictionary = {}
 var _cache_order: Array[String] = []
 var _packed_blocking_cache: Dictionary = {}
 var _packed_blocking_cache_order: Array[String] = []
+var _native_grid_cache: Dictionary = {}
+var _native_grid_cache_order: Array[String] = []
 var _last_result: Dictionary = {}
 var search_call_count: int = 0
 var search_execution_count: int = 0
+var native_grid_build_count: int = 0
 
 
 func find_path(start: RefCounted, goal: RefCounted, topology: Dictionary, occupied_actor_cells: Dictionary = {}) -> Dictionary:
@@ -131,6 +135,10 @@ func find_path_to_any(start: RefCounted, goals: Array[RefCounted], topology: Dic
 func clear_cache() -> void:
 	_cache.clear()
 	_cache_order.clear()
+	_packed_blocking_cache.clear()
+	_packed_blocking_cache_order.clear()
+	_native_grid_cache.clear()
+	_native_grid_cache_order.clear()
 
 
 func last_result() -> Dictionary:
@@ -328,24 +336,15 @@ func _native_grid_path(start: RefCounted, goals: Array[RefCounted], topology: Di
 	var max_x: int = int(bounds.get("max_x", 0))
 	var min_z: int = int(bounds.get("min_z", 0))
 	var max_z: int = int(bounds.get("max_z", 0))
-	var astar := AStarGrid2D.new()
-	astar.region = Rect2i(min_x, min_z, max_x - min_x + 1, max_z - min_z + 1)
-	astar.cell_size = Vector2.ONE
-	astar.diagonal_mode = AStarGrid2D.DIAGONAL_MODE_ONLY_IF_NO_OBSTACLES
-	astar.default_compute_heuristic = AStarGrid2D.HEURISTIC_CHEBYSHEV
-	astar.default_estimate_heuristic = AStarGrid2D.HEURISTIC_CHEBYSHEV
-	astar.update()
-	for key in _dictionary_or_empty(topology.get("blocking_cells", {})).keys():
-		var point: Vector2i = _point_from_cell_key(str(key))
-		if _point_in_bounds(point, min_x, max_x, min_z, max_z):
-			astar.set_point_solid(point, true)
+	var grid_state: Dictionary = _native_grid_state(topology, min_x, max_x, min_z, max_z)
+	var astar: AStarGrid2D = grid_state.get("astar") as AStarGrid2D
+	if astar == null:
+		return {}
 	var start_point := Vector2i(start.x, start.z)
-	for key in occupied_actor_cells.keys():
-		if str(key) == start.key():
-			continue
-		var occupied_point: Vector2i = _point_from_cell_key(str(key))
-		if _point_in_bounds(occupied_point, min_x, max_x, min_z, max_z):
-			astar.set_point_solid(occupied_point, true)
+	_sync_native_dynamic_solids(
+		grid_state,
+		_occupied_point_solid_keys(occupied_actor_cells, start.key(), min_x, max_x, min_z, max_z)
+	)
 	var best_path: PackedVector2Array = PackedVector2Array()
 	var best_goal: RefCounted = null
 	var searched_goals := 0
@@ -596,6 +595,7 @@ func _finish(result: Dictionary, started_usec: int) -> Dictionary:
 		search_call_count += 1
 		result["search_call_count"] = search_call_count
 		result["search_execution_count"] = search_execution_count
+		result["native_grid_build_count"] = native_grid_build_count
 		_last_result = result.duplicate(true)
 	result.erase("_skip_profiler_record")
 	return result
@@ -777,6 +777,102 @@ func _packed_cell_keys(cells: Dictionary, min_x: int, min_z: int, width: int) ->
 			continue
 		output[_packed_key(int(parts[0]), int(parts[2]), min_x, min_z, width)] = true
 	return output
+
+
+func _native_grid_state(topology: Dictionary, min_x: int, max_x: int, min_z: int, max_z: int) -> Dictionary:
+	var cache_key: String = _native_grid_cache_key(topology, min_x, max_x, min_z, max_z)
+	if not cache_key.is_empty() and _native_grid_cache.has(cache_key):
+		_native_grid_cache_order.erase(cache_key)
+		_native_grid_cache_order.append(cache_key)
+		return _dictionary_or_empty(_native_grid_cache.get(cache_key, {}))
+	var astar := AStarGrid2D.new()
+	astar.region = Rect2i(min_x, min_z, max_x - min_x + 1, max_z - min_z + 1)
+	astar.cell_size = Vector2.ONE
+	astar.diagonal_mode = AStarGrid2D.DIAGONAL_MODE_ONLY_IF_NO_OBSTACLES
+	astar.default_compute_heuristic = AStarGrid2D.HEURISTIC_CHEBYSHEV
+	astar.default_estimate_heuristic = AStarGrid2D.HEURISTIC_CHEBYSHEV
+	astar.update()
+	var static_solid_points: Dictionary = {}
+	for key in _dictionary_or_empty(topology.get("blocking_cells", {})).keys():
+		var point: Vector2i = _point_from_cell_key(str(key))
+		if not _point_in_bounds(point, min_x, max_x, min_z, max_z):
+			continue
+		var point_key := _point_key(point)
+		static_solid_points[point_key] = true
+		astar.set_point_solid(point, true)
+	var state := {
+		"astar": astar,
+		"static_solid_points": static_solid_points,
+		"dynamic_solid_points": {},
+		"min_x": min_x,
+		"max_x": max_x,
+		"min_z": min_z,
+		"max_z": max_z,
+	}
+	native_grid_build_count += 1
+	if cache_key.is_empty():
+		return state
+	_native_grid_cache[cache_key] = state
+	_native_grid_cache_order.erase(cache_key)
+	_native_grid_cache_order.append(cache_key)
+	while _native_grid_cache_order.size() > MAX_NATIVE_GRID_CACHE_ENTRIES:
+		var evicted_key: String = _native_grid_cache_order.pop_front()
+		_native_grid_cache.erase(evicted_key)
+	return state
+
+
+func _sync_native_dynamic_solids(grid_state: Dictionary, next_dynamic_points: Dictionary) -> void:
+	var astar: AStarGrid2D = grid_state.get("astar") as AStarGrid2D
+	if astar == null:
+		return
+	var current_dynamic_points: Dictionary = _dictionary_or_empty(grid_state.get("dynamic_solid_points", {}))
+	var static_solid_points: Dictionary = _dictionary_or_empty(grid_state.get("static_solid_points", {}))
+	for key in current_dynamic_points.keys():
+		if next_dynamic_points.has(key):
+			continue
+		var point: Vector2i = current_dynamic_points.get(key)
+		if not static_solid_points.has(key):
+			astar.set_point_solid(point, false)
+	for key in next_dynamic_points.keys():
+		if current_dynamic_points.has(key):
+			continue
+		var point: Vector2i = next_dynamic_points.get(key)
+		if not static_solid_points.has(key):
+			astar.set_point_solid(point, true)
+	grid_state["dynamic_solid_points"] = next_dynamic_points
+
+
+func _occupied_point_solid_keys(occupied_actor_cells: Dictionary, start_key: String, min_x: int, max_x: int, min_z: int, max_z: int) -> Dictionary:
+	var output: Dictionary = {}
+	for key in occupied_actor_cells.keys():
+		var cell_key := str(key)
+		if cell_key == start_key:
+			continue
+		var point: Vector2i = _point_from_cell_key(cell_key)
+		if not _point_in_bounds(point, min_x, max_x, min_z, max_z):
+			continue
+		output[_point_key(point)] = point
+	return output
+
+
+func _native_grid_cache_key(topology: Dictionary, min_x: int, max_x: int, min_z: int, max_z: int) -> String:
+	var cells: Dictionary = _dictionary_or_empty(topology.get("blocking_cells", {}))
+	var topology_revision: String = str(topology.get("topology_revision", topology.get("revision", "")))
+	var map_id: String = str(topology.get("map_id", topology.get("id", "")))
+	return "%s|%s|%d:%d:%d:%d|%d|%d" % [
+		map_id,
+		topology_revision,
+		min_x,
+		max_x,
+		min_z,
+		max_z,
+		cells.size(),
+		hash(cells),
+	]
+
+
+func _point_key(point: Vector2i) -> String:
+	return "%d:%d" % [point.x, point.y]
 
 
 func _packed_blocking_cell_keys(topology: Dictionary, min_x: int, min_z: int, width: int) -> Dictionary:

@@ -58,6 +58,7 @@ func _run_checks() -> Array[String]:
 		errors.append("second identical multi-target search should hit cache")
 	elif int(cached.get("search_execution_count", 0)) != int(multi.get("search_execution_count", 0)):
 		errors.append("cache hit should not increment search execution count")
+	errors.append_array(_expect_native_grid_reuse_with_dynamic_occupancy())
 
 	var blocked_topology: Dictionary = _open_topology()
 	blocked_topology["blocking_cells"] = {
@@ -120,6 +121,42 @@ func _run_checks() -> Array[String]:
 		errors.append("budgeted pathfinding should report visited count at the limit")
 	errors.append_array(_expect_far_npc_interaction_approach())
 	errors.append_array(_expect_far_map_object_interaction_approach())
+	return errors
+
+
+func _expect_native_grid_reuse_with_dynamic_occupancy() -> Array[String]:
+	var errors: Array[String] = []
+	var pathfinder := Pathfinder.new()
+	var topology := {
+		"map_id": "pathfinding_dynamic_smoke",
+		"topology_revision": "pathfinding_dynamic_smoke_v1",
+		"bounds": {
+			"min_x": 0,
+			"max_x": 4,
+			"min_z": 0,
+			"max_z": 0,
+		},
+		"blocking_cells": {},
+		"blocking_cell_count": 0,
+	}
+	var start := GridCoord.new(0, 0, 0)
+	var goal := GridCoord.new(4, 0, 0)
+	var open_result: Dictionary = pathfinder.find_path(start, goal, topology, {})
+	if not bool(open_result.get("success", false)):
+		errors.append("dynamic occupancy smoke should start with an open path: %s" % JSON.stringify(open_result))
+	var first_build_count: int = int(open_result.get("native_grid_build_count", 0))
+	if first_build_count != 1:
+		errors.append("first native grid search should build one AStarGrid2D, got %d" % first_build_count)
+	var occupied_result: Dictionary = pathfinder.find_path(start, goal, topology, {"2:0:0": 99})
+	if bool(occupied_result.get("success", false)) or str(occupied_result.get("reason", "")) != "path_unreachable":
+		errors.append("dynamic actor occupancy should block a one-tile corridor: %s" % JSON.stringify(occupied_result))
+	if int(occupied_result.get("native_grid_build_count", 0)) != first_build_count:
+		errors.append("dynamic actor occupancy should reuse the cached native grid")
+	var changed_goal_result: Dictionary = pathfinder.find_path(start, GridCoord.new(3, 0, 0), topology, {})
+	if not bool(changed_goal_result.get("success", false)):
+		errors.append("cleared dynamic occupancy should reopen the cached native grid: %s" % JSON.stringify(changed_goal_result))
+	if int(changed_goal_result.get("native_grid_build_count", 0)) != first_build_count:
+		errors.append("clearing dynamic occupancy should not rebuild the native grid")
 	return errors
 
 
