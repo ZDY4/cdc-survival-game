@@ -80,7 +80,7 @@ pwsh -NoProfile -File tools/agent/godot-agent-report.ps1 -Kind All -IncludeSourc
 行为：
 
 - `Scripts` 输出 `.gd` 摘要 JSON / Markdown。
-- `Scenes` 输出 `godot/scenes/**/*.tscn` / `.scn` 摘要 JSON / Markdown。
+- `Scenes` 输出 `godot/scenes/**/*.tscn` / `.scn` 摘要 JSON / Markdown，并列出 `godot/resources/world_tiles/**/*.tres` 中的 `WorldTilePrototype` / `WorldWallTileSet` / `WorldSurfaceTileSet` / `WorldTilePalette` 引用。
 - `-IncludeSource` 只额外生成脚本源码汇总文本。
 - 所有输出写入 `.local/agent-reports/godot/<timestamp>/`。
 
@@ -192,6 +192,27 @@ pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command asset-manifest -Kin
 - `format` 覆盖 `item` / `recipe` / `character` / `map` / `dialogue` / `dialogue_rule` / `quest` / `skill` / `skill_tree` / `settlement` / `overworld` / `shop` / `world_tile` / `ai` / `json`，只重排 JSON 空白，不通过 Godot Dictionary 重写字段顺序或数字字面量；加 `-DryRun` 时输出 `dry_run: true`，批量 `changed` 模式还会输出 `would_rewrite_files`，不落盘。
 - `fix changed` 是批量修复编排入口；会复用格式化修复并对 changed 内容执行安全 schema migration 写回，输出 `formatted_files` / `would_format_files`、`schema_migrated_files` / `would_schema_migrate_files`；加 `-DryRun` 时只预览格式化和 schema 写回，不落盘。
 - `asset-manifest all` 输出内容数据中显式引用的 Godot media / model 资产清单，包含领域、记录 id、字段路径、资源类型、解析后的 `res://assets/...` 路径、缺失状态和汇总计数。
+- 地图 tile 数据的权威源是 `godot/resources/world_tiles/**/*.tres`；`asset-manifest all` 和地图 / overworld 引用校验优先读取 `res://resources/world_tiles/palettes/default_world_tile_palette.tres`，`data/world_tiles/*.json` 仅作为迁移备份和 fallback 输入。
+
+### World tile Resource tools
+
+用途：
+
+- 把 `data/world_tiles/*.json` 迁移/同步为 Godot 文本 `.tres` Resource。
+- 校验 `WorldTilePrototype`、`WorldWallTileSet`、`WorldSurfaceTileSet` 和 `WorldTilePalette` 的 id、场景引用和 set 槽位。
+
+示例：
+
+```powershell
+D:\godot\godot.cmd --headless --path godot --script res://scripts/tools/world_tile_resource_migration.gd -- --dry-run
+D:\godot\godot.cmd --headless --path godot --script res://scripts/tools/world_tile_resource_migration.gd
+D:\godot\godot.cmd --headless --path godot --script res://scripts/tools/world_tile_resource_validate.gd
+```
+
+行为：
+
+- `world_tile_resource_migration.gd` 使用 `ContentRegistry.get_library("world_tiles")` 读取迁移备份 JSON，使用 `AssetPathResolver.resolve_model_asset()` 解析 `builtin:world_tile:` / `builtin:container:`，再通过 `ResourceSaver.save()` 写出文本 `.tres`，报告写入 `.local/agent-reports/world_tile_resource_migration/`。
+- `world_tile_resource_validate.gd` 直接读取 `res://resources/world_tiles/palettes/default_world_tile_palette.tres`，检查重复 id、缺失 scene、缺失 set 槽位和 palette 外引用。
 
 ### `test-godot-editor.ps1`
 

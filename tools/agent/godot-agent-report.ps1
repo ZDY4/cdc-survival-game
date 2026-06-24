@@ -77,6 +77,27 @@ function Get-FirstRegexGroup {
     return ""
 }
 
+function Get-ResourceBlockRegexGroup {
+    param(
+        [AllowEmptyCollection()][string[]]$Lines,
+        [Parameter(Mandatory = $true)][string]$Pattern
+    )
+    $inResource = $false
+    foreach ($line in $Lines) {
+        if ($line -match '^\[resource\]') {
+            $inResource = $true
+            continue
+        }
+        if (-not $inResource) {
+            continue
+        }
+        if ($line -match $Pattern) {
+            return $Matches[1]
+        }
+    }
+    return ""
+}
+
 function Get-GdScriptSummary {
     param([Parameter(Mandatory = $true)][System.IO.FileInfo]$File)
     $lines = @(Get-Content -LiteralPath $File.FullName)
@@ -262,6 +283,34 @@ function Get-SceneSummary {
     }
 }
 
+function Get-WorldTileResourceSummary {
+    $resourceRoot = Join-Path $godotRoot "resources\world_tiles"
+    $resourceFiles = @()
+    if (Test-Path -LiteralPath $resourceRoot) {
+        $resourceFiles = @(Get-ChildItem -LiteralPath $resourceRoot -Recurse -Filter "*.tres" -File | Sort-Object FullName)
+    }
+    $summaries = @()
+    foreach ($file in $resourceFiles) {
+        $lines = @(Get-Content -LiteralPath $file.FullName)
+        $scriptClass = Get-FirstRegexGroup $lines '^\[gd_resource\s+.*script_class="([^"]+)"'
+        $resourceId = Get-ResourceBlockRegexGroup $lines '^\s*id\s*=\s*&"([^"]+)"'
+        $packedSceneRefs = @()
+        foreach ($line in $lines) {
+            if ($line -match '^\[ext_resource\s+.*type="PackedScene"\s+.*path="([^"]+)"') {
+                $packedSceneRefs += $Matches[1]
+            }
+        }
+        $summaries += [PSCustomObject]@{
+            path = ConvertTo-RepoRelativePath $file.FullName
+            resourcePath = ConvertTo-GodotResourcePath $file.FullName
+            scriptClass = $scriptClass
+            id = $resourceId
+            packedSceneRefs = $packedSceneRefs
+        }
+    }
+    return $summaries
+}
+
 function Write-ScenesReport {
     $sceneRoot = Join-Path $godotRoot "scenes"
     $sceneFiles = @()
@@ -272,10 +321,13 @@ function Write-ScenesReport {
 
     $jsonPath = Join-Path $runRoot "scenes-summary.json"
     $markdownPath = Join-Path $runRoot "scenes-summary.md"
+    $worldTileResources = @(Get-WorldTileResourceSummary)
     [PSCustomObject]@{
         generatedAt = (Get-Date).ToString("o")
         sceneCount = $summaries.Count
         scenes = $summaries
+        worldTileResourceCount = $worldTileResources.Count
+        worldTileResources = $worldTileResources
     } | ConvertTo-Json -Depth 10 | Set-Content -Path $jsonPath
 
     $md = @()
@@ -283,7 +335,25 @@ function Write-ScenesReport {
     $md += ""
     $md += "- Generated: $((Get-Date).ToString("o"))"
     $md += "- Scene count: $($summaries.Count)"
+    $md += "- World tile resources: $($worldTileResources.Count)"
     $md += ""
+    if ($worldTileResources.Count -gt 0) {
+        $md += "## World Tile Resources"
+        foreach ($resource in $worldTileResources) {
+            $bits = @($resource.path)
+            if (-not [string]::IsNullOrWhiteSpace($resource.scriptClass)) {
+                $bits += "class=$($resource.scriptClass)"
+            }
+            if (-not [string]::IsNullOrWhiteSpace($resource.id)) {
+                $bits += "id=$($resource.id)"
+            }
+            if ($resource.packedSceneRefs.Count -gt 0) {
+                $bits += "scenes=$($resource.packedSceneRefs -join ',')"
+            }
+            $md += "- $($bits -join ' | ')"
+        }
+        $md += ""
+    }
     foreach ($scene in $summaries) {
         $md += "## $($scene.path)"
         $md += "- Lines: $($scene.lineCount)"

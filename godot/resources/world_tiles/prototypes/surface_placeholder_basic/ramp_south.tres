@@ -1,0 +1,12 @@
+[gd_resource type="Resource" script_class="WorldTilePrototype" format=3]
+
+[ext_resource type="PackedScene" path="res://assets/world_tiles/surface_placeholder_basic/ramp_south.gltf" id="1_tyd47"]
+[ext_resource type="Script" path="res://scripts/world/tiles/world_tile_prototype.gd" id="2_qnq7n"]
+
+[resource]
+script = ExtResource("2_qnq7n")
+id = &"surface_placeholder_basic/ramp_south"
+display_name = "surface_placeholder_basic/ramp_south"
+category = "surface"
+scene = ExtResource("1_tyd47")
+tags = PackedStringArray()

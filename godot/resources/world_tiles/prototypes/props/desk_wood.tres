@@ -1,0 +1,12 @@
+[gd_resource type="Resource" script_class="WorldTilePrototype" format=3]
+
+[ext_resource type="PackedScene" path="res://assets/world_tiles/prop_placeholder_basic/desk_wood.gltf" id="1_uu6ra"]
+[ext_resource type="Script" path="res://scripts/world/tiles/world_tile_prototype.gd" id="2_8qjws"]
+
+[resource]
+script = ExtResource("2_8qjws")
+id = &"props/desk_wood"
+display_name = "props/desk_wood"
+category = "prop"
+scene = ExtResource("1_uu6ra")
+tags = PackedStringArray()

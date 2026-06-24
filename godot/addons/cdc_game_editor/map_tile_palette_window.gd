@@ -11,6 +11,8 @@ const MapPickup3D = preload("res://scripts/world/map_pickup_3d.gd")
 const MapStaticProp3D = preload("res://scripts/world/map_static_prop_3d.gd")
 const MapTransitionTrigger3D = preload("res://scripts/world/map_transition_trigger_3d.gd")
 const MapSceneRoot = preload("res://scripts/world/map_scene_root.gd")
+const WorldTileResourceIndex = preload("res://scripts/world/tiles/world_tile_resource_index.gd")
+const WorldTilePrototype = preload("res://scripts/world/tiles/world_tile_prototype.gd")
 
 const CATEGORY_BUILDING := "Building Tiles"
 const CATEGORY_SURFACE := "Surface Tiles"
@@ -35,7 +37,9 @@ const MARKER_TYPES := [
 ]
 
 var registry: ContentRegistry
+var resource_index: RefCounted
 var palette_items: Array[Dictionary] = []
+var palette_source := "unknown"
 var selected_item: Dictionary = {}
 var rotation_degrees_y := 0
 var snap_enabled := true
@@ -64,8 +68,15 @@ func _ready() -> void:
 func refresh_palette() -> void:
 	if registry == null:
 		registry = ContentRegistry.new()
-	var load_result := registry.load_all()
 	palette_items.clear()
+	palette_source = "unknown"
+	if _collect_resource_palette_items():
+		_collect_marker_items()
+		_rebuild_item_list()
+		_set_status("Status: loaded %d palette items from Resource" % palette_items.size())
+		return
+
+	var load_result := registry.load_all()
 	if load_result.has_errors():
 		_set_status("Status: failed to load world tile registry")
 		for error in load_result.errors:
@@ -76,7 +87,8 @@ func refresh_palette() -> void:
 	_collect_world_tile_items()
 	_collect_marker_items()
 	_rebuild_item_list()
-	_set_status("Status: loaded %d palette items" % palette_items.size())
+	palette_source = "json"
+	_set_status("Status: loaded %d palette items from JSON fallback" % palette_items.size())
 
 
 func place_selected_item() -> Dictionary:
@@ -278,7 +290,39 @@ func _collect_world_tile_items() -> void:
 				"source_path": source_path,
 				"resource_path": str(resolved.get("resource_path", "")),
 				"record_id": str(record_id),
+				"source": "json",
 			})
+
+
+func _collect_resource_palette_items() -> bool:
+	resource_index = WorldTileResourceIndex.new()
+	if not resource_index.call("load_palette"):
+		for error in resource_index.get("load_errors"):
+			push_warning(str(error))
+		return false
+	var prototype_ids: Array = resource_index.call("sorted_prototype_ids")
+	for prototype_id_value in prototype_ids:
+		var prototype_id := str(prototype_id_value)
+		var prototype := resource_index.call("get_prototype", prototype_id) as WorldTilePrototype
+		if prototype == null or prototype.scene == null:
+			continue
+		var category := _category_for_resource_prototype(prototype)
+		if category.is_empty():
+			continue
+		var resource_path := prototype.scene_path()
+		if resource_path.is_empty() or not ResourceLoader.exists(resource_path):
+			continue
+		palette_items.append({
+			"id": prototype_id,
+			"label": prototype.display_name if not prototype.display_name.strip_edges().is_empty() else prototype_id.get_file(),
+			"category": category,
+			"source_path": resource_path,
+			"resource_path": resource_path,
+			"record_id": str(prototype.resource_path),
+			"source": "resource",
+		})
+	palette_source = "resource"
+	return not palette_items.is_empty()
 
 
 func _collect_marker_items() -> void:
@@ -301,6 +345,19 @@ func _category_for_prototype(prototype_id: String) -> String:
 	if prototype_id.begins_with("props/"):
 		return CATEGORY_PROPS
 	return ""
+
+
+func _category_for_resource_prototype(prototype: WorldTilePrototype) -> String:
+	match prototype.category:
+		"building":
+			return CATEGORY_BUILDING
+		"surface":
+			return CATEGORY_SURFACE
+		"prop":
+			return CATEGORY_PROPS
+		"marker":
+			return CATEGORY_MARKERS
+	return _category_for_prototype(prototype.source_id())
 
 
 func _rebuild_item_list() -> void:

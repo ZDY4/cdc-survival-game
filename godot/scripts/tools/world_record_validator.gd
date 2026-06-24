@@ -1,6 +1,7 @@
 extends RefCounted
 
 const ContentRegistry = preload("res://scripts/data/content_registry.gd")
+const WorldTileResourceIndex = preload("res://scripts/world/tiles/world_tile_resource_index.gd")
 
 
 func supports_domain(domain: String) -> bool:
@@ -165,6 +166,11 @@ func _world_tile_index(registry: ContentRegistry) -> Dictionary:
 	var output := {
 		"surface_sets": {},
 	}
+	var resource_index := WorldTileResourceIndex.new()
+	if resource_index.load_palette():
+		for surface_set_id in resource_index.sorted_surface_set_ids():
+			output["surface_sets"][surface_set_id] = true
+		return output
 	for record in registry.get_library("world_tiles").values():
 		var data := _dictionary_or_empty(_dictionary_or_empty(record).get("data", {}))
 		for surface_set in _array_or_empty(data.get("surface_sets", [])):

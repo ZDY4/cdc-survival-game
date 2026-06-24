@@ -1,0 +1,10 @@
+[gd_resource type="Resource" script_class="WorldSurfaceTileSet" format=3]
+
+[ext_resource type="Resource" path="res://resources/world_tiles/prototypes/building_wall/floor_flat.tres" id="1_4ob8s"]
+[ext_resource type="Script" path="res://scripts/world/tiles/world_surface_tile_set.gd" id="2_qejxk"]
+
+[resource]
+script = ExtResource("2_qejxk")
+id = &"building_wall/floor"
+display_name = "building_wall/floor"
+flat_top = ExtResource("1_4ob8s")

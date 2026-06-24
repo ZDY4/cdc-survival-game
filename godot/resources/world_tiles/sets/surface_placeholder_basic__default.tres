@@ -1,0 +1,24 @@
+[gd_resource type="Resource" script_class="WorldSurfaceTileSet" format=3]
+
+[ext_resource type="Resource" path="res://resources/world_tiles/prototypes/surface_placeholder_basic/cliff_inner_corner.tres" id="1_4m2o2"]
+[ext_resource type="Resource" path="res://resources/world_tiles/prototypes/surface_placeholder_basic/cliff_outer_corner.tres" id="2_li6cv"]
+[ext_resource type="Resource" path="res://resources/world_tiles/prototypes/surface_placeholder_basic/cliff_side.tres" id="3_vauai"]
+[ext_resource type="Resource" path="res://resources/world_tiles/prototypes/surface_placeholder_basic/flat.tres" id="4_lt8f3"]
+[ext_resource type="Resource" path="res://resources/world_tiles/prototypes/surface_placeholder_basic/ramp_east.tres" id="5_cvgmi"]
+[ext_resource type="Resource" path="res://resources/world_tiles/prototypes/surface_placeholder_basic/ramp_north.tres" id="6_fj50t"]
+[ext_resource type="Resource" path="res://resources/world_tiles/prototypes/surface_placeholder_basic/ramp_south.tres" id="7_hmyjp"]
+[ext_resource type="Resource" path="res://resources/world_tiles/prototypes/surface_placeholder_basic/ramp_west.tres" id="8_u6il5"]
+[ext_resource type="Script" path="res://scripts/world/tiles/world_surface_tile_set.gd" id="9_18uxb"]
+
+[resource]
+script = ExtResource("9_18uxb")
+id = &"surface_placeholder_basic/default"
+display_name = "surface_placeholder_basic/default"
+flat_top = ExtResource("4_lt8f3")
+ramp_north = ExtResource("6_fj50t")
+ramp_south = ExtResource("7_hmyjp")
+ramp_east = ExtResource("5_cvgmi")
+ramp_west = ExtResource("8_u6il5")
+cliff_side = ExtResource("3_vauai")
+cliff_inner_corner = ExtResource("1_4m2o2")
+cliff_outer_corner = ExtResource("2_li6cv")

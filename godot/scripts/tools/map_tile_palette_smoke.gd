@@ -40,6 +40,9 @@ func _run_checks() -> Array[String]:
 
 	if palette.palette_items.size() <= 0:
 		errors.append("palette should load world tile and marker items")
+	var expected_source := "json" if OS.get_cmdline_user_args().has("--expect-json-fallback") else "resource"
+	if palette.palette_source != expected_source:
+		errors.append("palette should use %s world tile palette, got %s" % [expected_source, palette.palette_source])
 
 	palette.setup_test_context(scene_root, [visuals])
 	if not palette.select_item_by_id("building_wall/floor_flat"):

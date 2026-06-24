@@ -2,6 +2,7 @@ extends RefCounted
 
 const ContentRegistry = preload("res://scripts/data/content_registry.gd")
 const AssetPathResolver = preload("res://scripts/data/asset_path_resolver.gd")
+const WorldTileResourceIndex = preload("res://scripts/world/tiles/world_tile_resource_index.gd")
 
 const EFFECTS_DOMAIN := "json"
 
@@ -231,6 +232,8 @@ func _validate_shop(id_value: String, record: Dictionary, registry: ContentRegis
 
 
 func _validate_world_tiles(id_value: String, record: Dictionary, registry: ContentRegistry, issues: Array[Dictionary]) -> void:
+	issues.append(_issue("warning", "$", "world_tiles_json_backup_not_authoritative", "world tile JSON is a migration backup; edit godot/resources/world_tiles/**/*.tres and rerun world_tile_resource_migration.gd when syncing JSON"))
+	_validate_world_tile_resources(issues)
 	var data: Dictionary = _dictionary_or_empty(record.get("data", {}))
 	var prototype_ids := {}
 	var prototypes: Array = data.get("prototypes", [])
@@ -528,6 +531,25 @@ func _world_tile_index(registry: ContentRegistry) -> Dictionary:
 		"surface_sets": {},
 		"wall_sets": {},
 	}
+	var resource_index := WorldTileResourceIndex.new()
+	if resource_index.load_palette():
+		for prototype_id in resource_index.sorted_prototype_ids():
+			var prototype: Resource = resource_index.get_prototype(prototype_id)
+			if prototype == null:
+				continue
+			output["prototypes"][prototype_id] = {
+				"id": prototype_id,
+				"source": {
+					"kind": "gltf_scene",
+					"path": str(prototype.call("scene_path")),
+					"scene_index": 0,
+				},
+			}
+		for surface_set_id in resource_index.sorted_surface_set_ids():
+			output["surface_sets"][surface_set_id] = true
+		for wall_set_id in resource_index.sorted_wall_set_ids():
+			output["wall_sets"][wall_set_id] = true
+		return output
 	for record in registry.get_library("world_tiles").values():
 		var data: Dictionary = _dictionary_or_empty(_dictionary_or_empty(record).get("data", {}))
 		for prototype in data.get("prototypes", []):
@@ -544,6 +566,22 @@ func _world_tile_index(registry: ContentRegistry) -> Dictionary:
 			if not wall_set_id.is_empty():
 				output["wall_sets"][wall_set_id] = true
 	return output
+
+
+func _validate_world_tile_resources(issues: Array[Dictionary]) -> void:
+	var resource_index := WorldTileResourceIndex.new()
+	if not resource_index.load_palette():
+		for error in resource_index.get("load_errors"):
+			issues.append(_issue("error", "res://resources/world_tiles/palettes/default_world_tile_palette.tres", "world_tile_resource_load_failed", str(error)))
+		return
+	for resource_issue in resource_index.validate():
+		var issue: Dictionary = _dictionary_or_empty(resource_issue)
+		issues.append(_issue(
+			str(issue.get("severity", "error")),
+			str(issue.get("path", "res://resources/world_tiles/palettes/default_world_tile_palette.tres")),
+			str(issue.get("code", "world_tile_resource_invalid")),
+			str(issue.get("message", "invalid world tile resource"))
+		))
 
 
 func _validate_item_ref(item_id: Variant, field: String, registry: ContentRegistry, issues: Array[Dictionary]) -> void:

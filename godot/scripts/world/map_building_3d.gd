@@ -2,7 +2,12 @@
 class_name MapBuilding3D
 extends "res://scripts/world/map_scene_object_3d.gd"
 
+const WorldSurfaceTileSet = preload("res://scripts/world/tiles/world_surface_tile_set.gd")
+const WorldWallTileSet = preload("res://scripts/world/tiles/world_wall_tile_set.gd")
+
 @export var prefab_id: String = ""
+@export var wall_set: WorldWallTileSet
+@export var floor_surface_set: WorldSurfaceTileSet
 @export var wall_set_id: String = ""
 @export var floor_surface_set_id: String = ""
 @export_multiline var props_json: String = "{}"
@@ -21,10 +26,12 @@ func build_object_props() -> Dictionary:
 	if not prefab_id.strip_edges().is_empty():
 		building["prefab_id"] = prefab_id
 	var tile_set := _dictionary_or_empty(building.get("tile_set", {})).duplicate(true)
-	if not wall_set_id.strip_edges().is_empty():
-		tile_set["wall_set_id"] = wall_set_id
-	if not floor_surface_set_id.strip_edges().is_empty():
-		tile_set["floor_surface_set_id"] = floor_surface_set_id
+	var exported_wall_set_id := _resource_id_or_fallback(wall_set, wall_set_id)
+	var exported_floor_surface_set_id := _resource_id_or_fallback(floor_surface_set, floor_surface_set_id)
+	if not exported_wall_set_id.is_empty():
+		tile_set["wall_set_id"] = exported_wall_set_id
+	if not exported_floor_surface_set_id.is_empty():
+		tile_set["floor_surface_set_id"] = exported_floor_surface_set_id
 	if not tile_set.is_empty():
 		building["tile_set"] = tile_set
 	if not building.is_empty():
@@ -55,3 +62,11 @@ func _collect_blocking_wall_cells(node: Node, cells_by_key: Dictionary) -> void:
 		return
 	for child in node.get_children():
 		_collect_blocking_wall_cells(child, cells_by_key)
+
+
+func _resource_id_or_fallback(resource: Resource, fallback: String) -> String:
+	if resource != null and resource.has_method("source_id"):
+		var resource_id := str(resource.call("source_id")).strip_edges()
+		if not resource_id.is_empty():
+			return resource_id
+	return fallback.strip_edges()

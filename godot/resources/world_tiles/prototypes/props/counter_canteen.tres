@@ -1,0 +1,12 @@
+[gd_resource type="Resource" script_class="WorldTilePrototype" format=3]
+
+[ext_resource type="PackedScene" path="res://assets/world_tiles/prop_placeholder_basic/counter_canteen.gltf" id="1_r2tn1"]
+[ext_resource type="Script" path="res://scripts/world/tiles/world_tile_prototype.gd" id="2_10fdk"]
+
+[resource]
+script = ExtResource("2_10fdk")
+id = &"props/counter_canteen"
+display_name = "props/counter_canteen"
+category = "prop"
+scene = ExtResource("1_r2tn1")
+tags = PackedStringArray()

@@ -1,0 +1,12 @@
+[gd_resource type="Resource" script_class="WorldTilePrototype" format=3]
+
+[ext_resource type="PackedScene" path="res://assets/world_tiles/prop_placeholder_basic/barricade_scrap.gltf" id="1_6n1nt"]
+[ext_resource type="Script" path="res://scripts/world/tiles/world_tile_prototype.gd" id="2_a0r1a"]
+
+[resource]
+script = ExtResource("2_a0r1a")
+id = &"props/barricade_scrap"
+display_name = "props/barricade_scrap"
+category = "prop"
+scene = ExtResource("1_6n1nt")
+tags = PackedStringArray()

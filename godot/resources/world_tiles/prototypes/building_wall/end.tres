@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="WorldTilePrototype" format=3]
+
+[ext_resource type="PackedScene" path="res://assets/world_tiles/building_wall/end.gltf" id="1_rev7r"]
+[ext_resource type="Script" path="res://scripts/world/tiles/world_tile_prototype.gd" id="2_fwrc2"]
+
+[resource]
+script = ExtResource("2_fwrc2")
+id = &"building_wall/end"
+display_name = "building_wall/end"
+scene = ExtResource("1_rev7r")
+tags = PackedStringArray()

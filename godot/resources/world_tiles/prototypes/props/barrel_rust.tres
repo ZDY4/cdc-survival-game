@@ -1,0 +1,12 @@
+[gd_resource type="Resource" script_class="WorldTilePrototype" format=3]
+
+[ext_resource type="PackedScene" path="res://assets/world_tiles/prop_placeholder_basic/barrel_rust.gltf" id="1_3md83"]
+[ext_resource type="Script" path="res://scripts/world/tiles/world_tile_prototype.gd" id="2_mpjb6"]
+
+[resource]
+script = ExtResource("2_mpjb6")
+id = &"props/barrel_rust"
+display_name = "props/barrel_rust"
+category = "prop"
+scene = ExtResource("1_3md83")
+tags = PackedStringArray()

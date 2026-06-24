@@ -1,0 +1,12 @@
+[gd_resource type="Resource" script_class="WorldTilePrototype" format=3]
+
+[ext_resource type="PackedScene" path="res://assets/world_tiles/prop_placeholder_basic/chair_metal.gltf" id="1_udsim"]
+[ext_resource type="Script" path="res://scripts/world/tiles/world_tile_prototype.gd" id="2_bwrne"]
+
+[resource]
+script = ExtResource("2_bwrne")
+id = &"props/chair_metal"
+display_name = "props/chair_metal"
+category = "prop"
+scene = ExtResource("1_udsim")
+tags = PackedStringArray()

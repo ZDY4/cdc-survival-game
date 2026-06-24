@@ -1,0 +1,12 @@
+[gd_resource type="Resource" script_class="WorldTilePrototype" format=3]
+
+[ext_resource type="PackedScene" path="res://assets/world_tiles/prop_placeholder_basic/wrecked_car.gltf" id="1_g5gmt"]
+[ext_resource type="Script" path="res://scripts/world/tiles/world_tile_prototype.gd" id="2_x7gc8"]
+
+[resource]
+script = ExtResource("2_x7gc8")
+id = &"props/wrecked_car"
+display_name = "props/wrecked_car"
+category = "prop"
+scene = ExtResource("1_g5gmt")
+tags = PackedStringArray()

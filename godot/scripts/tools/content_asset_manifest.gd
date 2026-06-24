@@ -1,6 +1,7 @@
 extends RefCounted
 
 const AssetPathResolver = preload("res://scripts/data/asset_path_resolver.gd")
+const WorldTileResourceIndex = preload("res://scripts/world/tiles/world_tile_resource_index.gd")
 
 
 func build(registry: RefCounted) -> Dictionary:
@@ -121,6 +122,14 @@ func _collect_sprite_rig_texture_assets(entries: Array[Dictionary], appearance_i
 
 
 func _collect_world_tile_assets(entries: Array[Dictionary], registry: RefCounted) -> void:
+	var resource_index := WorldTileResourceIndex.new()
+	if resource_index.load_palette():
+		for prototype_id in resource_index.sorted_prototype_ids():
+			var prototype: Resource = resource_index.get_prototype(prototype_id)
+			if prototype == null:
+				continue
+			_add_model_entry(entries, "world_tiles", "default_world_tile_palette", "prototypes[%s].scene" % prototype_id, str(prototype.call("scene_path")))
+		return
 	for world_tile_id in _sorted_keys(registry.get_library("world_tiles")):
 		var record: Dictionary = registry.get_library("world_tiles")[world_tile_id]
 		var data: Dictionary = _dictionary_or_empty(record.get("data", {}))
@@ -180,6 +189,9 @@ func _collect_map_tile_set_assets(
 
 
 func _world_tile_prototype_sources(registry: RefCounted) -> Dictionary:
+	var resource_index := WorldTileResourceIndex.new()
+	if resource_index.load_palette():
+		return resource_index.prototype_source_paths()
 	var output := {}
 	for world_tile_id in _sorted_keys(registry.get_library("world_tiles")):
 		var record: Dictionary = registry.get_library("world_tiles")[world_tile_id]
@@ -196,6 +208,9 @@ func _world_tile_prototype_sources(registry: RefCounted) -> Dictionary:
 
 
 func _world_tile_surface_set_prototypes(registry: RefCounted) -> Dictionary:
+	var resource_index := WorldTileResourceIndex.new()
+	if resource_index.load_palette():
+		return resource_index.surface_set_prototypes()
 	var output := {}
 	for world_tile_id in _sorted_keys(registry.get_library("world_tiles")):
 		var record: Dictionary = registry.get_library("world_tiles")[world_tile_id]
@@ -220,6 +235,9 @@ func _world_tile_surface_set_prototypes(registry: RefCounted) -> Dictionary:
 
 
 func _world_tile_wall_set_prototypes(registry: RefCounted) -> Dictionary:
+	var resource_index := WorldTileResourceIndex.new()
+	if resource_index.load_palette():
+		return resource_index.wall_set_prototypes()
 	var output := {}
 	for world_tile_id in _sorted_keys(registry.get_library("world_tiles")):
 		var record: Dictionary = registry.get_library("world_tiles")[world_tile_id]

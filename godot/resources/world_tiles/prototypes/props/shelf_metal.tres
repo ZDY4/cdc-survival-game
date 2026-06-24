@@ -1,0 +1,12 @@
+[gd_resource type="Resource" script_class="WorldTilePrototype" format=3]
+
+[ext_resource type="PackedScene" path="res://assets/world_tiles/prop_placeholder_basic/shelf_metal.gltf" id="1_l4e30"]
+[ext_resource type="Script" path="res://scripts/world/tiles/world_tile_prototype.gd" id="2_1mj3f"]
+
+[resource]
+script = ExtResource("2_1mj3f")
+id = &"props/shelf_metal"
+display_name = "props/shelf_metal"
+category = "prop"
+scene = ExtResource("1_l4e30")
+tags = PackedStringArray()

@@ -1,0 +1,20 @@
+[gd_resource type="Resource" script_class="WorldWallTileSet" format=3]
+
+[ext_resource type="Resource" path="res://resources/world_tiles/prototypes/building_wall/corner.tres" id="1_cfjwn"]
+[ext_resource type="Resource" path="res://resources/world_tiles/prototypes/building_wall/cross.tres" id="2_v5ioc"]
+[ext_resource type="Resource" path="res://resources/world_tiles/prototypes/building_wall/end.tres" id="3_xrsik"]
+[ext_resource type="Resource" path="res://resources/world_tiles/prototypes/building_wall/isolated.tres" id="4_kqtwq"]
+[ext_resource type="Script" path="res://scripts/world/tiles/world_wall_tile_set.gd" id="5_jpnuy"]
+[ext_resource type="Resource" path="res://resources/world_tiles/prototypes/building_wall/straight.tres" id="6_6rkcn"]
+[ext_resource type="Resource" path="res://resources/world_tiles/prototypes/building_wall/t_junction.tres" id="7_17tb4"]
+
+[resource]
+script = ExtResource("5_jpnuy")
+id = &"building_wall"
+display_name = "building_wall"
+corner = ExtResource("1_cfjwn")
+straight = ExtResource("6_6rkcn")
+end = ExtResource("3_xrsik")
+t_junction = ExtResource("7_17tb4")
+cross = ExtResource("2_v5ioc")
+isolated = ExtResource("4_kqtwq")

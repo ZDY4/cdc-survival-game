@@ -14,6 +14,7 @@ const JsonSourceLocator = preload("res://scripts/tools/json_source_locator.gd")
 const MapSceneLoader = preload("res://scripts/world/map_scene_loader.gd")
 const AssetPathResolver = preload("res://scripts/data/asset_path_resolver.gd")
 const ContentAssetManifest = preload("res://scripts/tools/content_asset_manifest.gd")
+const WorldTileResourceIndex = preload("res://scripts/world/tiles/world_tile_resource_index.gd")
 
 
 func _init() -> void:
@@ -76,6 +77,7 @@ func _run() -> Array[String]:
 	_expect_diff_summary_changed(errors)
 	_expect_schema_migration_diagnostics(errors, registry)
 	_expect_asset_path_resolver(errors)
+	_expect_world_tile_resource_index(errors)
 	_expect_asset_manifest(errors, registry)
 	_expect_invalid_recipe_ref(errors, registry)
 	_expect_invalid_item_appearance_asset_ref(errors, registry)
@@ -83,7 +85,6 @@ func _run() -> Array[String]:
 	_expect_invalid_shop_item_ref(errors, registry)
 	_expect_invalid_world_tile_asset_ref(errors, registry)
 	_expect_invalid_map_world_tile_ref(errors, registry)
-	_expect_invalid_map_world_tile_asset_ref(errors, registry)
 	_expect_invalid_overworld_surface_set_ref(errors, registry)
 	_expect_invalid_character_ai_ref(errors, registry)
 	_expect_invalid_ai_behavior_group_ref(errors, registry)
@@ -345,29 +346,47 @@ func _expect_asset_manifest(errors: Array[String], registry: ContentRegistry) ->
 	var sprite_texture_entry := _asset_manifest_entry(manifest, "appearance", "default_humanoid", "sprite_rig.spine_02.yaw_000_pitch_0")
 	if str(sprite_texture_entry.get("resource_path", "")) != "res://assets/characters/sprite_rigs/default_humanoid/spine_02/yaw_000_pitch_0.png":
 		errors.append("asset manifest should include sprite rig texture path: %s" % sprite_texture_entry)
-	var world_tile_entry := _asset_manifest_entry(manifest, "world_tiles", "building_wall", "prototypes[building_wall/isolated].source.path")
-	if str(world_tile_entry.get("source_id", "")) != "builtin:world_tile:building_wall/isolated" \
+	var world_tile_entry := _asset_manifest_entry(manifest, "world_tiles", "default_world_tile_palette", "prototypes[building_wall/isolated].scene")
+	if str(world_tile_entry.get("source_id", "")) != "res://assets/world_tiles/building_wall/isolated.gltf" \
 			or str(world_tile_entry.get("resource_path", "")) != "res://assets/world_tiles/building_wall/isolated.gltf":
 		errors.append("asset manifest should include world tile glTF path: %s" % world_tile_entry)
-	var container_tile_entry := _asset_manifest_entry(manifest, "world_tiles", "prop_placeholders", "prototypes[props/crate_wood].source.path")
-	if str(container_tile_entry.get("source_id", "")) != "builtin:container:crate_wood" \
+	var container_tile_entry := _asset_manifest_entry(manifest, "world_tiles", "default_world_tile_palette", "prototypes[props/crate_wood].scene")
+	if str(container_tile_entry.get("source_id", "")) != "res://assets/container_placeholders/crate_wood.gltf" \
 			or str(container_tile_entry.get("resource_path", "")) != "res://assets/container_placeholders/crate_wood.gltf":
 		errors.append("asset manifest should normalize builtin container world tile asset: %s" % container_tile_entry)
 	var map_visual_entry := _asset_manifest_entry(manifest, "maps", "survivor_outpost_01", "objects[14].props.visual.prototype_id")
 	if str(map_visual_entry.get("reference_id", "")) != "props/table_metal" \
-			or str(map_visual_entry.get("source_id", "")) != "builtin:world_tile:prop_placeholder_basic/table_metal" \
+			or str(map_visual_entry.get("source_id", "")) != "res://assets/world_tiles/prop_placeholder_basic/table_metal.gltf" \
 			or str(map_visual_entry.get("resource_path", "")) != "res://assets/world_tiles/prop_placeholder_basic/table_metal.gltf":
 		errors.append("asset manifest should expose map visual prototype asset path: %s" % map_visual_entry)
 	var map_wall_entry := _asset_manifest_entry(manifest, "maps", "survivor_outpost_01", "objects[0].props.building.tile_set.wall_set_id.isolated_prototype_id")
 	if str(map_wall_entry.get("reference_id", "")) != "building_wall:building_wall/isolated" \
-			or str(map_wall_entry.get("source_id", "")) != "builtin:world_tile:building_wall/isolated" \
+			or str(map_wall_entry.get("source_id", "")) != "res://assets/world_tiles/building_wall/isolated.gltf" \
 			or str(map_wall_entry.get("resource_path", "")) != "res://assets/world_tiles/building_wall/isolated.gltf":
 		errors.append("asset manifest should expose map wall set prototype asset path: %s" % map_wall_entry)
 	var map_floor_entry := _asset_manifest_entry(manifest, "maps", "survivor_outpost_01", "objects[0].props.building.tile_set.floor_surface_set_id.flat_top_prototype_id")
 	if str(map_floor_entry.get("reference_id", "")) != "building_wall/floor:building_wall/floor_flat" \
-			or str(map_floor_entry.get("source_id", "")) != "builtin:world_tile:building_wall/floor_flat" \
+			or str(map_floor_entry.get("source_id", "")) != "res://assets/world_tiles/building_wall/floor_flat.gltf" \
 			or str(map_floor_entry.get("resource_path", "")) != "res://assets/world_tiles/building_wall/floor_flat.gltf":
 		errors.append("asset manifest should expose map surface set prototype asset path: %s" % map_floor_entry)
+
+
+func _expect_world_tile_resource_index(errors: Array[String]) -> void:
+	var resource_index := WorldTileResourceIndex.new()
+	if not resource_index.load_palette():
+		errors.append("world tile resource palette should load: %s" % resource_index.get("load_errors"))
+		return
+	var issues: Array = resource_index.validate()
+	if not issues.is_empty():
+		errors.append("world tile resource palette should validate: %s" % issues)
+	if resource_index.sorted_prototype_ids().size() != 34:
+		errors.append("world tile resource palette should expose 34 prototypes: %s" % resource_index.sorted_prototype_ids())
+	if not resource_index.prototype_source_paths().has("props/table_metal"):
+		errors.append("world tile resource index should expose prop prototype sources")
+	if not resource_index.wall_set_prototypes().has("building_wall"):
+		errors.append("world tile resource index should expose wall sets")
+	if not resource_index.surface_set_prototypes().has("building_wall/floor"):
+		errors.append("world tile resource index should expose surface sets")
 
 
 func _asset_manifest_entry(manifest: Dictionary, domain: String, record_id: String, field: String) -> Dictionary:

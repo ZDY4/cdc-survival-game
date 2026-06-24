@@ -1,0 +1,12 @@
+[gd_resource type="Resource" script_class="WorldTilePrototype" format=3]
+
+[ext_resource type="PackedScene" path="res://assets/world_tiles/prop_placeholder_basic/gate_pillar_concrete.gltf" id="1_qbjv7"]
+[ext_resource type="Script" path="res://scripts/world/tiles/world_tile_prototype.gd" id="2_o5vg4"]
+
+[resource]
+script = ExtResource("2_o5vg4")
+id = &"props/gate_pillar_concrete"
+display_name = "props/gate_pillar_concrete"
+category = "prop"
+scene = ExtResource("1_qbjv7")
+tags = PackedStringArray()
