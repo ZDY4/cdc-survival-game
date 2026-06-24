@@ -186,14 +186,14 @@ func focused_actor_busy_state(focused_actor: Dictionary, simulation: RefCounted)
 	if focused_actor.is_empty() or simulation == null:
 		return {}
 	var actor_id := int(focused_actor.get("actor_id", 0))
-	var snapshot: Dictionary = simulation.snapshot()
-	var pending_movement: Dictionary = _dictionary_or_empty(snapshot.get("pending_movement", {}))
+	# 直接读活 sim 的 pending 状态，避免为取三个字段跑整局全量 snapshot()。
+	var pending_movement: Dictionary = _dictionary_or_empty(simulation.pending_movement)
 	if not pending_movement.is_empty() and int(pending_movement.get("actor_id", 0)) == actor_id:
 		return {"kind": "pending_movement", "state": pending_movement.duplicate(true)}
-	var pending_interaction: Dictionary = _dictionary_or_empty(snapshot.get("pending_interaction", {}))
+	var pending_interaction: Dictionary = _dictionary_or_empty(simulation.pending_interaction)
 	if not pending_interaction.is_empty() and int(pending_interaction.get("actor_id", 0)) == actor_id:
 		return {"kind": "pending_interaction", "state": pending_interaction.duplicate(true)}
-	var pending_crafting: Dictionary = _dictionary_or_empty(snapshot.get("pending_crafting", {}))
+	var pending_crafting: Dictionary = _dictionary_or_empty(simulation.pending_crafting)
 	if not pending_crafting.is_empty() and int(pending_crafting.get("actor_id", 0)) == actor_id:
 		return {"kind": "pending_crafting", "state": pending_crafting.duplicate(true)}
 	return {}
