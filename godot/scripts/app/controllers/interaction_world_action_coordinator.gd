@@ -52,7 +52,7 @@ func apply_interaction_execution_result(result: Dictionary, executed_target: Dic
 func build_interaction_final_world_result() -> Dictionary:
 	if host.runtime_refresh_controller == null or host.simulation == null:
 		return host.world_result.duplicate(true)
-	var built: Dictionary = dictionary_or_empty(host.runtime_refresh_controller.call("build_world_result_from_snapshot", host.simulation.snapshot(), "interaction_final_refresh"))
+	var built: Dictionary = dictionary_or_empty(host.runtime_refresh_controller.call("build_world_result_from_snapshot", host.simulation.world_runtime_view(), "interaction_final_refresh"))
 	if bool(built.get("ok", false)):
 		return dictionary_or_empty(built.get("world_result", {})).duplicate(true)
 	push_error("交互最终地图快照构建失败: %s" % str(built.get("error", built.get("reason", "unknown"))))

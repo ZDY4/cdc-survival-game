@@ -56,7 +56,7 @@ func apply_dialogue_trade_result(result: Dictionary) -> void:
 func has_active_dialogue() -> bool:
 	if host.simulation == null:
 		return false
-	for actor in host.simulation.snapshot().get("actors", []):
+	for actor in host.simulation.actor_registry.snapshot():
 		var actor_data: Dictionary = dictionary_or_empty(actor)
 		if actor_data.get("kind", "") == "player":
 			return not str(actor_data.get("active_dialogue_id", "")).is_empty()
@@ -495,7 +495,7 @@ func current_dialogue_snapshot() -> Dictionary:
 	if host.simulation == null:
 		return {}
 	var DialogueSnapshot = preload("res://scripts/ui/snapshots/dialogue_snapshot.gd")
-	return DialogueSnapshot.new(host.registry).build(host.simulation.snapshot())
+	return DialogueSnapshot.new(host.registry).build(host.simulation.ui_runtime_view())
 
 
 func active_shop_id() -> String:

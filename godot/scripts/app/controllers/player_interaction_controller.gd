@@ -132,7 +132,7 @@ func _refresh_world_after_success(result: Dictionary) -> void:
 
 
 func _rebuild_world_for_active_map() -> void:
-	var rebuilt: Dictionary = WorldSnapshotBuilder.new(registry).build_from_runtime_snapshot(simulation.snapshot())
+	var rebuilt: Dictionary = WorldSnapshotBuilder.new(registry).build_from_runtime_snapshot(simulation.world_runtime_view())
 	if bool(rebuilt.get("ok", false)):
 		world_result = rebuilt
 		var map: Dictionary = _dictionary_or_empty(world_result.get("map", {}))
@@ -183,7 +183,7 @@ func _execution_result(success: bool, reason: String, result: Dictionary) -> Dic
 
 
 func _find_player_actor_id() -> int:
-	for actor in simulation.snapshot().get("actors", []):
+	for actor in simulation.actor_registry.snapshot():
 		var actor_data: Dictionary = actor
 		if actor_data.get("kind", "") == "player":
 			return int(actor_data.get("actor_id", 0))

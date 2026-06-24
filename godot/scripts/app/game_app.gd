@@ -769,7 +769,7 @@ func _current_dialogue_snapshot() -> Dictionary:
 	if simulation == null:
 		return {}
 	var DialogueSnapshot = preload("res://scripts/ui/snapshots/dialogue_snapshot.gd")
-	return DialogueSnapshot.new(registry).build(simulation.snapshot())
+	return DialogueSnapshot.new(registry).build(simulation.ui_runtime_view())
 
 func _trade_closed_payload(target: Dictionary, reason: String) -> Dictionary:
 	return _dictionary_or_empty(runtime_session_context_controller.call("trade_closed_payload", registry, simulation, target, reason))

@@ -21,14 +21,14 @@ func configure_runtime_audio_layers() -> void:
 	if host.audio_feedback_controller == null or host.simulation == null:
 		return
 	if host.audio_feedback_controller.has_method("configure_runtime_audio"):
-		host.audio_feedback_controller.call("configure_runtime_audio", host.simulation.snapshot(), host.world_result)
+		host.audio_feedback_controller.call("configure_runtime_audio", host.simulation.world_runtime_view(), host.world_result)
 
 
 func process_audio_feedback() -> void:
 	if host.audio_feedback_controller == null or host.simulation == null:
 		return
 	if host.audio_feedback_controller.has_method("process_runtime_snapshot"):
-		host.audio_feedback_controller.call("process_runtime_snapshot", host.simulation.snapshot())
+		host.audio_feedback_controller.call("process_runtime_snapshot", host.simulation.world_runtime_view())
 
 
 func play_ui_audio_feedback(event_kind: String, payload: Dictionary = {}) -> Dictionary:
