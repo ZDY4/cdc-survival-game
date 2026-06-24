@@ -11,8 +11,8 @@ func snapshot(simulation: RefCounted) -> Dictionary:
 			"display_time": "09:00",
 			"display_label": "monday 09:00",
 		}
-	var runtime_snapshot: Dictionary = simulation.snapshot()
-	var world_time: Dictionary = _dictionary_or_empty(runtime_snapshot.get("world_time", {}))
+	# 直接读活 sim 的 world_time，避免为取一个字段跑整局全量 snapshot()。
+	var world_time: Dictionary = _dictionary_or_empty(simulation.world_time)
 	var minute_of_day: int = posmod(int(world_time.get("minute_of_day", 540)), 1440)
 	var hour := int(minute_of_day / 60)
 	var minute := minute_of_day % 60

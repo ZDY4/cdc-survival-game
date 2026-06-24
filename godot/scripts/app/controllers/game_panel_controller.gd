@@ -121,7 +121,7 @@ func refresh_all(selected_prompt: Dictionary = {}) -> void:
 func refresh_hud(selected_prompt: Dictionary = {}) -> void:
 	if hud == null or simulation == null:
 		return
-	var snapshot: Dictionary = HudSnapshot.new(registry).build(simulation.snapshot(), world_result, selected_prompt)
+	var snapshot: Dictionary = HudSnapshot.new(registry).build(simulation.ui_runtime_view(), world_result, selected_prompt)
 	if parent != null and parent.has_method("current_debug_overlay_mode"):
 		snapshot["debug_overlay_mode"] = parent.current_debug_overlay_mode()
 	if parent != null and parent.has_method("info_panel_snapshot"):
@@ -141,7 +141,7 @@ func refresh_hud(selected_prompt: Dictionary = {}) -> void:
 func refresh_dialogue_panel() -> void:
 	if dialogue_panel == null or simulation == null:
 		return
-	dialogue_panel.apply_snapshot(DialogueSnapshot.new(registry).build(simulation.snapshot()))
+	dialogue_panel.apply_snapshot(DialogueSnapshot.new(registry).build(simulation.ui_runtime_view()))
 	_record_panel_visibility_changes("refresh_dialogue")
 
 
@@ -168,7 +168,7 @@ func _apply_runtime_attack_preview(snapshot: Dictionary) -> void:
 func _actor_display_name(actor_id: int) -> String:
 	if actor_id <= 0 or simulation == null:
 		return ""
-	for actor in _array_or_empty(simulation.snapshot().get("actors", [])):
+	for actor in _array_or_empty(simulation.actor_registry.snapshot()):
 		var actor_data: Dictionary = _dictionary_or_empty(actor)
 		if int(actor_data.get("actor_id", 0)) == actor_id:
 			return str(actor_data.get("display_name", ""))
@@ -178,35 +178,35 @@ func _actor_display_name(actor_id: int) -> String:
 func refresh_inventory_panel() -> void:
 	if inventory_panel == null or simulation == null:
 		return
-	inventory_panel.apply_snapshot(InventorySnapshot.new(registry).build(simulation.snapshot(), active_inventory_feedback, _crafting_context()))
+	inventory_panel.apply_snapshot(InventorySnapshot.new(registry).build(simulation.ui_runtime_view(), active_inventory_feedback, _crafting_context()))
 	_apply_stage_panel_visibility()
 
 
 func refresh_trade_panel() -> void:
 	if trade_panel == null or simulation == null:
 		return
-	trade_panel.apply_snapshot(TradeSnapshot.new(registry).build(simulation.snapshot(), active_trade_target, active_trade_feedback))
+	trade_panel.apply_snapshot(TradeSnapshot.new(registry).build(simulation.ui_runtime_view(), active_trade_target, active_trade_feedback))
 	_record_panel_visibility_changes("refresh_trade")
 
 
 func refresh_container_panel() -> void:
 	if container_panel == null or simulation == null:
 		return
-	container_panel.apply_snapshot(ContainerSnapshot.new(registry).build(simulation.snapshot(), active_container_feedback))
+	container_panel.apply_snapshot(ContainerSnapshot.new(registry).build(simulation.ui_runtime_view(), active_container_feedback))
 	_record_panel_visibility_changes("refresh_container")
 
 
 func refresh_character_panel() -> void:
 	if character_panel == null or simulation == null:
 		return
-	character_panel.apply_snapshot(CharacterSnapshot.new(registry).build(simulation.snapshot(), active_character_feedback))
+	character_panel.apply_snapshot(CharacterSnapshot.new(registry).build(simulation.ui_runtime_view(), active_character_feedback))
 	_apply_stage_panel_visibility()
 
 
 func refresh_journal_panel() -> void:
 	if journal_panel == null or simulation == null:
 		return
-	var snapshot: Dictionary = JournalSnapshot.new(registry).build(simulation.snapshot())
+	var snapshot: Dictionary = JournalSnapshot.new(registry).build(simulation.ui_runtime_view())
 	snapshot["tracked_quest_id"] = tracked_quest_id
 	if not tracked_quest_id.is_empty() and _quest_summary_by_id(snapshot.get("quests", []), tracked_quest_id).is_empty():
 		tracked_quest_id = ""
@@ -219,7 +219,7 @@ func refresh_map_panel() -> void:
 	if map_panel == null or simulation == null:
 		return
 	var tracked_quest: Dictionary = _tracked_quest_snapshot()
-	var snapshot: Dictionary = MapSnapshot.new(registry).build(simulation.snapshot(), world_result, tracked_quest)
+	var snapshot: Dictionary = MapSnapshot.new(registry).build(simulation.ui_runtime_view(), world_result, tracked_quest)
 	snapshot["tracked_quest"] = tracked_quest
 	map_panel.apply_snapshot(snapshot)
 	_apply_stage_panel_visibility()
@@ -228,14 +228,14 @@ func refresh_map_panel() -> void:
 func refresh_skills_panel() -> void:
 	if skills_panel == null or simulation == null:
 		return
-	skills_panel.apply_snapshot(SkillsSnapshot.new(registry).build(simulation.snapshot()))
+	skills_panel.apply_snapshot(SkillsSnapshot.new(registry).build(simulation.ui_runtime_view()))
 	_apply_stage_panel_visibility()
 
 
 func refresh_crafting_panel() -> void:
 	if crafting_panel == null or simulation == null:
 		return
-	crafting_panel.apply_snapshot(CraftingSnapshot.new(registry).build(simulation.snapshot(), _crafting_context()))
+	crafting_panel.apply_snapshot(CraftingSnapshot.new(registry).build(simulation.ui_runtime_view(), _crafting_context()))
 	_apply_stage_panel_visibility()
 
 
@@ -828,7 +828,7 @@ func _modal_owner_panel_id(modal_name: String) -> String:
 func _tracked_quest_snapshot() -> Dictionary:
 	if tracked_quest_id.is_empty():
 		return {"active": false, "quest_id": ""}
-	var journal_snapshot: Dictionary = JournalSnapshot.new(registry).build(simulation.snapshot())
+	var journal_snapshot: Dictionary = JournalSnapshot.new(registry).build(simulation.ui_runtime_view())
 	var quest: Dictionary = _quest_summary_by_id(journal_snapshot.get("quests", []), tracked_quest_id)
 	if quest.is_empty():
 		tracked_quest_id = ""

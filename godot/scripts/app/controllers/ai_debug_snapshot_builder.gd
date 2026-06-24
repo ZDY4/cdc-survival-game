@@ -4,12 +4,14 @@ extends RefCounted
 func snapshot(simulation: RefCounted, focused_actor: Dictionary) -> Dictionary:
 	if simulation == null:
 		return {"intent_count": 0, "intents": [], "focused_intent": {}}
-	var runtime_snapshot: Dictionary = simulation.snapshot()
 	var focused_actor_id := int(focused_actor.get("actor_id", 0))
 	var intents: Array[Dictionary] = []
 	var focused_intent: Dictionary = {}
-	for entry in _array_or_empty(runtime_snapshot.get("ai_intents", [])):
-		var intent: Dictionary = intent_summary(_dictionary_or_empty(entry))
+	# 直接读活 sim 的 ai_intents（按 actor_id 排序，与快照序列化顺序一致），避免跑整局全量 snapshot()。
+	var intent_ids: Array = simulation.ai_intents.keys()
+	intent_ids.sort()
+	for intent_id in intent_ids:
+		var intent: Dictionary = intent_summary(_dictionary_or_empty(simulation.ai_intents[intent_id]))
 		if intent.is_empty():
 			continue
 		if focused_actor_id > 0 and int(intent.get("actor_id", 0)) == focused_actor_id:

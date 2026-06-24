@@ -88,6 +88,39 @@ func build_world_runtime_view(simulation: RefCounted) -> Dictionary:
 	}
 
 
+## UI 面板（ui/snapshots/* 各构建器）实际消费的精简运行时视图。只序列化这些面板读取的字段，
+## 避免 HUD/面板刷新触发整局全量 snapshot()（省掉 vision/door_states/ai_intents/命令历史等无关序列化，
+## 以及 recent_failure/recent_feedback 等多轮 events 扫描——UI 仅需 target_preview 一个派生字段）。
+## 字段值与 build() 中对应项一致，故各面板产物不变；现有 *_ui_smoke 仍可传完整 snapshot()（超集）正常工作。
+func build_ui_runtime_view(simulation: RefCounted) -> Dictionary:
+	var event_output: Array[Dictionary] = _derived.serialize_events(simulation)
+	var recent_interaction: Dictionary = _derived.recent_interaction_target(event_output, simulation.interaction_menu)
+	return {
+		"active_map_id": simulation.active_map_id,
+		"active_location_id": simulation.active_location_id,
+		"active_entry_point_id": simulation.active_entry_point_id,
+		"unlocked_locations": simulation.unlocked_locations.duplicate(),
+		"actors": simulation.actor_registry.snapshot(),
+		"events": event_output,
+		"turn_state": simulation.turn_state.duplicate(true),
+		"combat_state": simulation.combat_state.duplicate(true),
+		"pending_crafting": simulation.pending_crafting.duplicate(true),
+		"crafting_queue": _crafting_queue_snapshots(simulation.crafting_queue),
+		"hotbar": simulation.hotbar.duplicate(true),
+		"active_hotbar_group": str(simulation.active_hotbar_group),
+		"hotbar_groups": _hotbar_group_snapshots(simulation.hotbar_groups),
+		"hotbar_group_labels": _hotbar_group_label_snapshots(simulation.hotbar_group_labels),
+		"relationships": _relationship_snapshots(simulation.relationships),
+		"world_flags": simulation.world_flags.keys(),
+		"shop_sessions": _shop_session_snapshots(simulation.shop_sessions),
+		"container_sessions": _container_session_snapshots(simulation.container_sessions),
+		"active_quests": _active_quest_snapshots(simulation.active_quests),
+		"completed_quests": simulation.completed_quests.keys(),
+		"crafted_recipes": simulation.crafted_recipes.keys(),
+		"target_preview": _derived.target_preview(simulation.interaction_menu, simulation.pending_interaction, recent_interaction),
+	}
+
+
 func _active_quest_snapshots(active_quests: Dictionary) -> Array[Dictionary]:
 	var output: Array[Dictionary] = []
 	var ids: Array = active_quests.keys()

@@ -537,6 +537,14 @@ func world_runtime_view() -> Dictionary:
 	return _snapshot_builder.build_world_runtime_view(self)
 
 
+## UI 面板专用的精简运行时视图，只含各面板构建器消费的字段，避免 HUD/面板刷新跑整局全量 snapshot()。
+## 含 hotbar 字段，故与 snapshot() 一样先同步 hotbar 分组一致性。
+func ui_runtime_view() -> Dictionary:
+	_sync_active_hotbar_group()
+	_ensure_hotbar_groups()
+	return _snapshot_builder.build_ui_runtime_view(self)
+
+
 func load_snapshot(snapshot_data: Dictionary) -> void:
 	_snapshot_codec.load(self, snapshot_data)
 
