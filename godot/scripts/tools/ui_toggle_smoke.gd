@@ -1355,6 +1355,8 @@ func _exercise_debug_console(errors: Array[String], game_root: Node) -> void:
 		errors.append("debug console panel should be visible after quote key")
 	if game_root.hud.find_child("ConsoleInput", true, false) == null:
 		errors.append("debug console should expose ConsoleInput")
+	else:
+		_assert_debug_console_bottom_input(errors, game_root, "opened console")
 	var fps_result: Dictionary = game_root.submit_debug_console_command("show fps")
 	_assert_hud_control_audio(errors, game_root, "ui_button_pressed", "ui_click", "DebugConsoleInput", "text_submit", "submit_debug_console_command", {"value": "show fps"}, "debug console show fps audio")
 	if not bool(fps_result.get("success", false)):
@@ -1484,16 +1486,32 @@ func _exercise_debug_console_keyboard_features(errors: Array[String], game_root:
 	_emit_console_key(input, KEY_DOWN)
 	if input.text != "help":
 		errors.append("debug console Down should move forward in command history, got %s" % input.text)
-	input.text = "obs"
-	input.caret_column = input.text.length()
+	_set_console_input_text(input, "obs")
+	var obs_snapshot: Dictionary = _dictionary_or_empty(game_root.debug_console_snapshot())
+	if not bool(obs_snapshot.get("completion_visible", false)):
+		errors.append("debug console completion list should be visible for obs: %s" % obs_snapshot)
+	if not _array_has_text(_array_or_empty(obs_snapshot.get("completion_candidates", [])), "observe mode"):
+		errors.append("debug console completion candidates should include observe mode: %s" % obs_snapshot)
 	_emit_console_key(input, KEY_TAB)
 	if input.text != "observe mode":
 		errors.append("debug console Tab should autocomplete observe mode, got %s" % input.text)
-	input.text = "show "
-	input.caret_column = input.text.length()
+	_set_console_input_text(input, "show ")
+	var show_snapshot: Dictionary = _dictionary_or_empty(game_root.debug_console_snapshot())
+	var show_candidates: Array = _array_or_empty(show_snapshot.get("completion_candidates", []))
+	if not _array_has_text(show_candidates, "show fps") or not _array_has_text(show_candidates, "show overlays"):
+		errors.append("debug console show prefix should expose show candidates: %s" % show_snapshot)
+	var selected_before := str(show_snapshot.get("completion_selected_text", ""))
+	_emit_console_key(input, KEY_DOWN)
+	var selected_after := str(_dictionary_or_empty(game_root.debug_console_snapshot()).get("completion_selected_text", ""))
+	if selected_after.is_empty() or selected_after == selected_before:
+		errors.append("debug console Down should move completion selection, before=%s after=%s" % [selected_before, selected_after])
 	_emit_console_key(input, KEY_TAB)
-	if not input.text.begins_with("show "):
-		errors.append("debug console Tab should keep shared show prefix, got %s" % input.text)
+	if input.text != selected_after:
+		errors.append("debug console Tab should complete selected candidate %s, got %s" % [selected_after, input.text])
+	_set_console_input_text(input, "")
+	_emit_console_key(input, KEY_UP)
+	if input.text != "help":
+		errors.append("debug console empty-input Up should recall latest command, got %s" % input.text)
 
 
 func _emit_console_key(input: LineEdit, key: int) -> void:
@@ -1504,12 +1522,40 @@ func _emit_console_key(input: LineEdit, key: int) -> void:
 	input.gui_input.emit(event)
 
 
+func _set_console_input_text(input: LineEdit, text: String) -> void:
+	input.text = text
+	input.caret_column = input.text.length()
+	input.text_changed.emit(text)
+
+
+func _assert_debug_console_bottom_input(errors: Array[String], game_root: Node, context: String) -> void:
+	var console := game_root.hud.find_child("DebugConsole", true, false) as Control
+	var input := game_root.hud.find_child("ConsoleInput", true, false) as Control
+	if console == null or input == null:
+		errors.append("%s: debug console bottom layout missing console/input" % context)
+		return
+	var lines := console.find_child("ConsoleLines", true, false)
+	if lines == null or lines.get_child_count() <= 0 or lines.get_child(lines.get_child_count() - 1) != input:
+		errors.append("%s: ConsoleInput should be the last control in debug console layout" % context)
+	var viewport_height := game_root.get_viewport().get_visible_rect().size.y
+	var console_bottom := console.global_position.y + console.size.y
+	var input_bottom := input.global_position.y + input.size.y
+	if absf(console_bottom - viewport_height) > 2.0:
+		errors.append("%s: debug console should attach to viewport bottom, console_bottom=%s viewport=%s" % [context, console_bottom, viewport_height])
+	if input_bottom - console_bottom > 1.0:
+		errors.append("%s: ConsoleInput should not extend below debug console bottom, input_bottom=%s console_bottom=%s" % [context, input_bottom, console_bottom])
+	if input.custom_minimum_size.y < 30.0:
+		errors.append("%s: ConsoleInput should keep stable readable height, got %s" % [context, input.custom_minimum_size])
+
+
 func _assert_debug_console_snapshot(errors: Array[String], game_root: Node, expected_visible: bool, context: String) -> void:
 	var snapshot: Dictionary = _dictionary_or_empty(game_root.debug_console_snapshot())
 	if bool(snapshot.get("visible", not expected_visible)) != expected_visible:
 		errors.append("%s: debug console visible expected %s, got %s" % [context, str(expected_visible), snapshot])
 	if int(snapshot.get("suggestion_count", 0)) < 5:
 		errors.append("%s: debug console should expose command suggestions: %s" % [context, snapshot])
+	if expected_visible and not snapshot.has("completion_candidates"):
+		errors.append("%s: debug console should expose completion snapshot fields: %s" % [context, snapshot])
 	_assert_runtime_control_line(errors, game_root, "Console %s" % ("on" if expected_visible else "off"), "%s HUD console token" % context)
 
 
@@ -3132,6 +3178,13 @@ func _array_or_empty(value: Variant) -> Array:
 func _strings_contain_token(values: Array, token: String) -> bool:
 	for value in values:
 		if str(value).contains(token):
+			return true
+	return false
+
+
+func _array_has_text(values: Array, expected: String) -> bool:
+	for value in values:
+		if str(value) == expected:
 			return true
 	return false
 
