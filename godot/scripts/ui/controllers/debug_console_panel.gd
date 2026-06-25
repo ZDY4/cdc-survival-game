@@ -15,6 +15,8 @@ var _command_schema: Array[Dictionary] = []
 var _permission: Dictionary = {}
 var _completion_candidates: Array[String] = []
 var _completion_selected_index := -1
+var _completion_query_text := ""
+var _suppress_completion_refresh := false
 var _suggestions: Array[String] = [
 	"help",
 	"show fps",
@@ -170,8 +172,9 @@ func set_result(command_text: String, result: Dictionary) -> void:
 	_record_command(command_text)
 	while _history.size() > 8:
 		_history.pop_front()
+	_completion_query_text = ""
 	if _input != null:
-		_input.text = ""
+		_replace_input_text("")
 	_refresh_completions()
 	apply()
 
@@ -206,7 +209,10 @@ func _submit_command(text: String) -> void:
 
 
 func _input_text_changed(_text: String) -> void:
+	if _suppress_completion_refresh:
+		return
 	_history_index = -1
+	_completion_query_text = _text
 	_refresh_completions()
 
 
@@ -239,10 +245,10 @@ func _recall_history(direction: int) -> void:
 		_history_index = _command_history.size()
 	_history_index = clampi(_history_index + direction, 0, _command_history.size())
 	if _history_index >= _command_history.size():
-		_input.text = ""
+		_replace_input_text("")
 	else:
-		_input.text = _command_history[_history_index]
-	_input.caret_column = _input.text.length()
+		_replace_input_text(_command_history[_history_index])
+	_completion_query_text = ""
 	_completion_candidates.clear()
 	_completion_selected_index = -1
 	_refresh_completion_list()
@@ -263,7 +269,10 @@ func _autocomplete_input() -> void:
 
 func _refresh_completions() -> void:
 	_completion_candidates.clear()
-	var prefix := _input.text.strip_edges().to_lower() if _input != null else ""
+	var source_text := _completion_query_text
+	if source_text.is_empty() and _input != null:
+		source_text = _input.text
+	var prefix := source_text.strip_edges().to_lower()
 	var compact_prefix := _completion_key(prefix)
 	var limit := 6
 	for suggestion in _suggestions:
@@ -295,20 +304,23 @@ func _refresh_completion_list() -> void:
 func _move_completion_selection(direction: int) -> bool:
 	if _input == null or _input.text.strip_edges().is_empty() or _completion_candidates.is_empty():
 		return false
-	var typed_text := _input.text
-	var typed_caret := _input.caret_column
 	if _completion_selected_index < 0:
 		_completion_selected_index = 0 if direction >= 0 else _completion_candidates.size() - 1
 	else:
 		_completion_selected_index = wrapi(_completion_selected_index + direction, 0, _completion_candidates.size())
+	var replacement := _selected_completion_text()
+	if replacement.is_empty():
+		return false
+	_replace_input_text(replacement, true)
 	_refresh_completion_list()
-	_input.text = typed_text
-	_input.caret_column = typed_caret
 	return true
 
 
 func _select_completion_index(index: int) -> void:
 	_completion_selected_index = clampi(index, 0, max(0, _completion_candidates.size() - 1))
+	var replacement := _selected_completion_text()
+	if not replacement.is_empty() and _input != null:
+		_replace_input_text(replacement, true)
 	_refresh_completion_list()
 
 
@@ -334,11 +346,26 @@ func _selected_completion_text() -> String:
 
 
 func _set_input_text(value: String) -> void:
+	_replace_input_text(value, false)
+
+
+func _replace_input_text(value: String, preserve_completion_query: bool = false) -> void:
 	if _input == null:
 		return
+	_suppress_completion_refresh = true
 	_input.text = value
 	_input.caret_column = _input.text.length()
-	_refresh_completions()
+	_suppress_completion_refresh = false
+	if not preserve_completion_query:
+		_completion_query_text = value
+		if value.strip_edges().is_empty():
+			_completion_candidates.clear()
+			_completion_selected_index = -1
+			_refresh_completion_list()
+		else:
+			_refresh_completions()
+	else:
+		_refresh_completion_list()
 
 
 func _record_command(command_text: String) -> void:

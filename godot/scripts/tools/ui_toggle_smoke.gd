@@ -1518,17 +1518,17 @@ func _exercise_debug_console_keyboard_features(errors: Array[String], game_root:
 	var selected_after := str(_dictionary_or_empty(game_root.debug_console_snapshot()).get("completion_selected_text", ""))
 	if selected_after.is_empty() or selected_after == selected_before:
 		errors.append("debug console Down should move completion selection, before=%s after=%s" % [selected_before, selected_after])
-	if input.text != "show ":
-		errors.append("debug console Down should not replace typed text while selecting completion, got %s" % input.text)
+	if input.text != selected_after:
+		errors.append("debug console Down should replace input with selected completion %s, got %s" % [selected_after, input.text])
 	_emit_console_key(input, KEY_UP)
 	var selected_again := str(_dictionary_or_empty(game_root.debug_console_snapshot()).get("completion_selected_text", ""))
 	if selected_again != selected_before:
 		errors.append("debug console Up should move completion selection back, expected=%s got=%s" % [selected_before, selected_again])
-	if input.text != "show ":
-		errors.append("debug console Up should not replace typed text while selecting completion, got %s" % input.text)
+	if input.text != selected_again:
+		errors.append("debug console Up should replace input with selected completion %s, got %s" % [selected_again, input.text])
 	_emit_console_key(input, KEY_TAB)
 	if input.text != selected_again:
-		errors.append("debug console Tab should complete selected candidate %s, got %s" % [selected_again, input.text])
+		errors.append("debug console Tab should keep selected candidate %s, got %s" % [selected_again, input.text])
 	_set_console_input_text(input, "showfps")
 	var compact_snapshot: Dictionary = _dictionary_or_empty(game_root.debug_console_snapshot())
 	if not _array_has_text(_array_or_empty(compact_snapshot.get("completion_candidates", [])), "show fps"):
