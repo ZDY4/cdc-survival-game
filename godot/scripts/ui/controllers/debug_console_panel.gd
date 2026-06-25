@@ -1,6 +1,7 @@
 extends RefCounted
 
-var _panel: PanelContainer
+var _panel: Control
+var _background: PanelContainer
 var _history_label: Label
 var _suggestions_label: Label
 var _completion_list: ItemList
@@ -32,30 +33,51 @@ func build(owner: Control) -> void:
 	if _panel != null:
 		return
 	_owner = owner
-	_panel = PanelContainer.new()
+	_panel = Control.new()
 	_panel.name = "DebugConsole"
 	_panel.visible = false
 	_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_panel.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
-	_panel.offset_left = 16
-	_panel.offset_right = -16
+	_panel.offset_left = 0
+	_panel.offset_right = 0
 	_panel.offset_top = -236
 	_panel.offset_bottom = 0
 	owner.add_child(_panel)
 
+	_background = PanelContainer.new()
+	_background.name = "ConsoleBackground"
+	_background.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_background.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_background.offset_left = 0
+	_background.offset_top = 0
+	_background.offset_right = 0
+	_background.offset_bottom = 0
+	_background.add_theme_stylebox_override("panel", _console_panel_style())
+	_panel.add_child(_background)
+
 	var box := VBoxContainer.new()
 	box.name = "ConsoleLines"
 	box.add_theme_constant_override("separation", 4)
+	box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	box.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	box.set_anchors_preset(Control.PRESET_FULL_RECT)
+	box.offset_left = 12
+	box.offset_top = 8
+	box.offset_right = -12
+	box.offset_bottom = -36
 	_panel.add_child(box)
 
 	_history_label = _line("ConsoleHistory")
+	_history_label.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_suggestions_label = _line("ConsoleSuggestions")
+	_suggestions_label.custom_minimum_size = Vector2(0, 20)
 	_completion_list = ItemList.new()
 	_completion_list.name = "ConsoleCompletionList"
 	_completion_list.custom_minimum_size = Vector2(0, 112)
 	_completion_list.auto_height = false
 	_completion_list.select_mode = ItemList.SELECT_SINGLE
 	_completion_list.allow_reselect = true
+	_completion_list.focus_mode = Control.FOCUS_NONE
 	_completion_list.visible = false
 	_completion_list.item_selected.connect(_select_completion_index)
 	_completion_list.item_activated.connect(_activate_completion_index)
@@ -64,13 +86,18 @@ func build(owner: Control) -> void:
 	_input.placeholder_text = "debug command"
 	_input.focus_mode = Control.FOCUS_ALL
 	_input.custom_minimum_size = Vector2(0, 32)
+	_input.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
+	_input.offset_left = 12
+	_input.offset_top = -32
+	_input.offset_right = -12
+	_input.offset_bottom = 0
 	_input.text_changed.connect(_input_text_changed)
 	_input.text_submitted.connect(_submit_command)
 	_input.gui_input.connect(_handle_input_event)
 	box.add_child(_history_label)
 	box.add_child(_suggestions_label)
 	box.add_child(_completion_list)
-	box.add_child(_input)
+	_panel.add_child(_input)
 	apply()
 
 
@@ -164,7 +191,7 @@ func apply() -> void:
 	if _suggestions_label != null:
 		_suggestions_label.text = _help_text()
 	_refresh_completion_list()
-	if not _visible and _input != null:
+	if not _visible and _input != null and _input.is_inside_tree():
 		_input.release_focus()
 
 
@@ -237,12 +264,15 @@ func _autocomplete_input() -> void:
 func _refresh_completions() -> void:
 	_completion_candidates.clear()
 	var prefix := _input.text.strip_edges().to_lower() if _input != null else ""
+	var compact_prefix := _completion_key(prefix)
 	var limit := 6
 	for suggestion in _suggestions:
 		var suggestion_text := str(suggestion).strip_edges()
 		if suggestion_text.is_empty():
 			continue
-		if prefix.is_empty() or suggestion_text.to_lower().begins_with(prefix):
+		var suggestion_key := suggestion_text.to_lower()
+		var compact_suggestion_key := _completion_key(suggestion_key)
+		if prefix.is_empty() or suggestion_key.begins_with(prefix) or (not compact_prefix.is_empty() and compact_suggestion_key.begins_with(compact_prefix)):
 			_completion_candidates.append(suggestion_text)
 			if _completion_candidates.size() >= limit:
 				break
@@ -265,11 +295,15 @@ func _refresh_completion_list() -> void:
 func _move_completion_selection(direction: int) -> bool:
 	if _input == null or _input.text.strip_edges().is_empty() or _completion_candidates.is_empty():
 		return false
+	var typed_text := _input.text
+	var typed_caret := _input.caret_column
 	if _completion_selected_index < 0:
 		_completion_selected_index = 0 if direction >= 0 else _completion_candidates.size() - 1
 	else:
 		_completion_selected_index = wrapi(_completion_selected_index + direction, 0, _completion_candidates.size())
 	_refresh_completion_list()
+	_input.text = typed_text
+	_input.caret_column = typed_caret
 	return true
 
 
@@ -347,7 +381,23 @@ func _line(node_name: String) -> Label:
 	return label
 
 
+func _console_panel_style() -> StyleBoxFlat:
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.05, 0.06, 0.07, 0.88)
+	style.border_color = Color(0.25, 0.31, 0.34, 0.95)
+	style.border_width_top = 1
+	style.content_margin_left = 12
+	style.content_margin_top = 8
+	style.content_margin_right = 12
+	style.content_margin_bottom = 0
+	return style
+
+
 func _dictionary_or_empty(value: Variant) -> Dictionary:
 	if typeof(value) == TYPE_DICTIONARY:
 		return value
 	return {}
+
+
+func _completion_key(value: String) -> String:
+	return value.replace(" ", "").replace("\t", "")

@@ -427,6 +427,8 @@ func _line(node_name: String) -> Label:
 	label.name = node_name
 	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	label.clip_text = true
+	label.custom_minimum_size = Vector2(0, 18)
+	label.add_theme_color_override("font_color", Color(0.90, 0.94, 0.93, 1.0))
 	return label
 
 

@@ -23,7 +23,7 @@ func permission_snapshot(game_root: Node) -> Dictionary:
 
 
 func execute(game_root: Node, command: String) -> Dictionary:
-	var normalized := command.to_lower().strip_edges()
+	var normalized := _normalize_command_text(command)
 	var mutation_result: Dictionary = _command_runner.execute(game_root, command)
 	if not mutation_result.is_empty():
 		return mutation_result
@@ -61,3 +61,15 @@ func _debug_intent(action: String) -> Dictionary:
 		"success": true,
 		"debug_intent": action,
 	}
+
+
+func _normalize_command_text(command: String) -> String:
+	var normalized := command.to_lower().strip_edges()
+	match normalized.replace(" ", "").replace("\t", ""):
+		"showfps":
+			return "show fps"
+		"showoverlays":
+			return "show overlays"
+		"observemode":
+			return "observe mode"
+	return normalized

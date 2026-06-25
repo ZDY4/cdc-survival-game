@@ -1309,6 +1309,8 @@ func _exercise_debug_panel(errors: Array[String], game_root: Node) -> void:
 			errors.append("debug panel should expose %s line" % kind)
 		elif not line is Label or str((line as Label).text).is_empty():
 			errors.append("debug panel %s line should contain text" % kind)
+		elif (line as Control).custom_minimum_size.y < 18.0:
+			errors.append("debug panel %s line should keep a visible minimum height, got %s" % [kind, (line as Control).custom_minimum_size])
 	var runtime: Dictionary = _dictionary_or_empty(game_root.runtime_control_snapshot())
 	var debug_panel: Dictionary = _dictionary_or_empty(runtime.get("debug_panel", {}))
 	if not bool(debug_panel.get("visible", false)):
@@ -1372,6 +1374,17 @@ func _exercise_debug_console(errors: Array[String], game_root: Node) -> void:
 	if not bool(fps_close_result.get("success", false)) or bool(fps_close_result.get("visible", true)):
 		errors.append("debug console show fps should close debug panel on second call: %s" % fps_close_result)
 	_assert_debug_panel_snapshot(errors, game_root, false, "show fps closed debug panel")
+	var compact_fps_result: Dictionary = game_root.submit_debug_console_command("showfps")
+	if not bool(compact_fps_result.get("success", false)) or not bool(compact_fps_result.get("visible", false)):
+		errors.append("debug console showfps should normalize to show fps and open debug panel: %s" % compact_fps_result)
+	_assert_debug_panel_snapshot(errors, game_root, true, "showfps opened debug panel")
+	var compact_panel_lines: Array = _array_or_empty(_dictionary_or_empty(game_root.debug_panel_snapshot()).get("lines", []))
+	if not _strings_contain_token(compact_panel_lines, "Perf "):
+		errors.append("showfps debug panel should expose visible performance line: %s" % compact_panel_lines)
+	var compact_fps_close_result: Dictionary = game_root.submit_debug_console_command("showfps")
+	if not bool(compact_fps_close_result.get("success", false)) or bool(compact_fps_close_result.get("visible", true)):
+		errors.append("debug console showfps should close debug panel on second call: %s" % compact_fps_close_result)
+	_assert_debug_panel_snapshot(errors, game_root, false, "showfps closed debug panel")
 	var overlay_before := str(game_root.current_debug_overlay_mode())
 	var overlay_result: Dictionary = game_root.submit_debug_console_command("show overlays")
 	if not bool(overlay_result.get("success", false)):
@@ -1505,9 +1518,21 @@ func _exercise_debug_console_keyboard_features(errors: Array[String], game_root:
 	var selected_after := str(_dictionary_or_empty(game_root.debug_console_snapshot()).get("completion_selected_text", ""))
 	if selected_after.is_empty() or selected_after == selected_before:
 		errors.append("debug console Down should move completion selection, before=%s after=%s" % [selected_before, selected_after])
+	if input.text != "show ":
+		errors.append("debug console Down should not replace typed text while selecting completion, got %s" % input.text)
+	_emit_console_key(input, KEY_UP)
+	var selected_again := str(_dictionary_or_empty(game_root.debug_console_snapshot()).get("completion_selected_text", ""))
+	if selected_again != selected_before:
+		errors.append("debug console Up should move completion selection back, expected=%s got=%s" % [selected_before, selected_again])
+	if input.text != "show ":
+		errors.append("debug console Up should not replace typed text while selecting completion, got %s" % input.text)
 	_emit_console_key(input, KEY_TAB)
-	if input.text != selected_after:
-		errors.append("debug console Tab should complete selected candidate %s, got %s" % [selected_after, input.text])
+	if input.text != selected_again:
+		errors.append("debug console Tab should complete selected candidate %s, got %s" % [selected_again, input.text])
+	_set_console_input_text(input, "showfps")
+	var compact_snapshot: Dictionary = _dictionary_or_empty(game_root.debug_console_snapshot())
+	if not _array_has_text(_array_or_empty(compact_snapshot.get("completion_candidates", [])), "show fps"):
+		errors.append("debug console compact input showfps should suggest show fps: %s" % compact_snapshot)
 	_set_console_input_text(input, "")
 	_emit_console_key(input, KEY_UP)
 	if input.text != "help":
@@ -1534,14 +1559,22 @@ func _assert_debug_console_bottom_input(errors: Array[String], game_root: Node, 
 	if console == null or input == null:
 		errors.append("%s: debug console bottom layout missing console/input" % context)
 		return
-	var lines := console.find_child("ConsoleLines", true, false)
-	if lines == null or lines.get_child_count() <= 0 or lines.get_child(lines.get_child_count() - 1) != input:
-		errors.append("%s: ConsoleInput should be the last control in debug console layout" % context)
+	if console.get_child_count() <= 0 or console.get_child(console.get_child_count() - 1) != input:
+		errors.append("%s: ConsoleInput should be the last direct control in debug console layout" % context)
+	var lines := console.find_child("ConsoleLines", true, false) as Control
+	if lines == null:
+		errors.append("%s: debug console should keep history/completion area above input" % context)
+	else:
+		var lines_bottom := lines.global_position.y + lines.size.y
+		if lines_bottom > input.global_position.y + 1.0:
+			errors.append("%s: ConsoleLines should stay above ConsoleInput, lines_bottom=%s input_top=%s" % [context, lines_bottom, input.global_position.y])
 	var viewport_height := game_root.get_viewport().get_visible_rect().size.y
 	var console_bottom := console.global_position.y + console.size.y
 	var input_bottom := input.global_position.y + input.size.y
 	if absf(console_bottom - viewport_height) > 2.0:
 		errors.append("%s: debug console should attach to viewport bottom, console_bottom=%s viewport=%s" % [context, console_bottom, viewport_height])
+	if absf(input_bottom - viewport_height) > 2.0:
+		errors.append("%s: ConsoleInput should attach to viewport bottom, input_bottom=%s viewport=%s" % [context, input_bottom, viewport_height])
 	if input_bottom - console_bottom > 1.0:
 		errors.append("%s: ConsoleInput should not extend below debug console bottom, input_bottom=%s console_bottom=%s" % [context, input_bottom, console_bottom])
 	if input.custom_minimum_size.y < 30.0:
