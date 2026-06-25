@@ -97,7 +97,7 @@ func _build_layout() -> void:
 	panel.offset_left = 16
 	panel.offset_top = 16
 	panel.offset_right = 560
-	panel.offset_bottom = 184
+	panel.offset_bottom = 336
 	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(panel)
 
@@ -394,8 +394,11 @@ func input_blocker_snapshot() -> Dictionary:
 func _line(node_name: String) -> Label:
 	var label := Label.new()
 	label.name = node_name
-	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	label.autowrap_mode = TextServer.AUTOWRAP_OFF
 	label.clip_text = true
+	label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	# 固定单行高度，避免启动 HUD 行在固定面板内被 VBox 压缩到不可见。
+	label.custom_minimum_size = Vector2(0, 18)
 	return label
 
 

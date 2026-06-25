@@ -126,11 +126,14 @@ func _validate_hud(hud: Control, snapshot: Dictionary) -> Array[String]:
 	var errors: Array[String] = []
 	if hud.get_node_or_null("HudPanel/HudLines/WorldLine") == null:
 		errors.append("missing world line")
+	else:
+		_validate_hud_line_layout(errors, hud.get_node("HudPanel/HudLines/WorldLine") as Label, "world line")
 	if not hud.get_node("HudPanel/HudLines/WorldLine").text.contains(str(snapshot.get("world", {}).get("map_id", ""))):
 		errors.append("world line missing map id")
 	if hud.get_node_or_null("HudPanel/HudLines/StatusBadgeLine") == null:
 		errors.append("missing status badge line")
 	else:
+		_validate_hud_line_layout(errors, hud.get_node("HudPanel/HudLines/StatusBadgeLine") as Label, "status badge line")
 		var status_text := str(hud.get_node("HudPanel/HudLines/StatusBadgeLine").text)
 		for token in ["HP", "AP", "Lv", "Round", "Phase", "Combat"]:
 			if not status_text.contains(token):
@@ -138,6 +141,7 @@ func _validate_hud(hud: Control, snapshot: Dictionary) -> Array[String]:
 	if hud.get_node_or_null("HudPanel/HudLines/RuntimeControlLine") == null:
 		errors.append("missing runtime control line")
 	else:
+		_validate_hud_line_layout(errors, hud.get_node("HudPanel/HudLines/RuntimeControlLine") as Label, "runtime control line")
 		var runtime_text := str(hud.get_node("HudPanel/HudLines/RuntimeControlLine").text)
 		for token in ["Runner active move:move_step", "Step 1/2", "Remain 1", "Interact pickup/item_pickup -> survivor_outpost_01_pickup_medkit done", "Attack player #1 -> #2 hit 3 done", "Wait auto_tick_wait -> crafting resume done", "Craft recipe_bandage_basic x2 4/4AP queue done", "AP 4/6", "Delta -2", "Pending movement"]:
 			if not runtime_text.contains(token):
@@ -226,6 +230,18 @@ func _validate_hud(hud: Control, snapshot: Dictionary) -> Array[String]:
 	elif not _has_disabled_option(interaction.get("disabled_options", []), "open_container", "target_not_container"):
 		errors.append("HUD snapshot should expose disabled interaction reason")
 	return errors
+
+
+func _validate_hud_line_layout(errors: Array[String], label: Label, context: String) -> void:
+	if label == null:
+		errors.append("%s missing label for layout check" % context)
+		return
+	if label.custom_minimum_size.y < 18.0:
+		errors.append("%s should keep readable minimum height, got %s" % [context, label.custom_minimum_size])
+	if label.autowrap_mode != TextServer.AUTOWRAP_OFF:
+		errors.append("%s should stay single-line clipped in compact HUD" % context)
+	if label.text_overrun_behavior != TextServer.OVERRUN_TRIM_ELLIPSIS:
+		errors.append("%s should trim overflow instead of wrapping compact HUD text" % context)
 
 
 func _validate_reason_catalog() -> Array[String]:
