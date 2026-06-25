@@ -8,6 +8,9 @@ const HOVER_COLOR_INTERACTION := Color(1.0, 0.82, 0.18, 0.72)
 const HOVER_COLOR_MOVE_REACHABLE := Color(0.24, 0.95, 0.48, 0.72)
 const HOVER_COLOR_MOVE_BLOCKED := Color(1.0, 0.22, 0.18, 0.72)
 const MOVE_PATH_DOT_COLOR := Color(1.0, 1.0, 1.0, 0.30)
+const MOVE_PATH_DOT_TEXTURE_SIZE := 16
+const MOVE_PATH_DOT_WORLD_DIAMETER_ENDPOINT := 0.24
+const MOVE_PATH_DOT_WORLD_DIAMETER_MIDDLE := 0.19
 const HOVER_COLOR_ATTACK_REACHABLE := Color(1.0, 0.45, 0.16, 0.78)
 const HOVER_COLOR_ATTACK_BLOCKED := Color(0.95, 0.12, 0.28, 0.78)
 const HOVER_COLOR_PICKUP := Color(0.35, 0.82, 1.0, 0.50)
@@ -23,6 +26,7 @@ var attack_target_outline: MeshInstance3D
 var attack_range_markers: Node3D
 var skill_target_preview_markers: Node3D
 var move_path_preview_markers: Node3D
+var _move_path_dot_texture: ImageTexture
 
 var _vision_geometry := VisionGeometry.new()
 var _skill_target_preview_controller: RefCounted = SkillTargetPreviewController.new()
@@ -542,23 +546,35 @@ func _build_attack_range_marker(color: Color) -> MeshInstance3D:
 	return node
 
 
-func _build_move_path_preview_marker(index: int, path_length: int) -> MeshInstance3D:
-	var mesh := CylinderMesh.new()
-	var radius := 0.24 if index == 0 or index == path_length - 1 else 0.19
-	mesh.top_radius = radius
-	mesh.bottom_radius = radius
-	mesh.height = 0.032
-	mesh.radial_segments = 24
-	var material := StandardMaterial3D.new()
-	material.albedo_color = MOVE_PATH_DOT_COLOR
-	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	material.no_depth_test = true
-	var node := MeshInstance3D.new()
+func _build_move_path_preview_marker(index: int, path_length: int) -> Sprite3D:
+	var diameter := MOVE_PATH_DOT_WORLD_DIAMETER_ENDPOINT if index == 0 or index == path_length - 1 else MOVE_PATH_DOT_WORLD_DIAMETER_MIDDLE
+	var node := Sprite3D.new()
 	node.name = "MovePathPreviewMarker"
-	node.mesh = mesh
-	node.material_override = material
+	node.texture = _move_path_preview_dot_texture()
+	node.modulate = MOVE_PATH_DOT_COLOR
+	node.pixel_size = diameter / float(MOVE_PATH_DOT_TEXTURE_SIZE)
+	node.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	node.no_depth_test = true
+	node.shaded = false
+	node.transparent = true
+	node.set_meta("world_diameter", diameter)
 	return node
+
+
+func _move_path_preview_dot_texture() -> ImageTexture:
+	if _move_path_dot_texture != null:
+		return _move_path_dot_texture
+	var image := Image.create(MOVE_PATH_DOT_TEXTURE_SIZE, MOVE_PATH_DOT_TEXTURE_SIZE, false, Image.FORMAT_RGBA8)
+	image.fill(Color(1.0, 1.0, 1.0, 0.0))
+	var center := (float(MOVE_PATH_DOT_TEXTURE_SIZE) - 1.0) * 0.5
+	var radius := center
+	for y in range(MOVE_PATH_DOT_TEXTURE_SIZE):
+		for x in range(MOVE_PATH_DOT_TEXTURE_SIZE):
+			var distance := Vector2(float(x) - center, float(y) - center).length()
+			if distance <= radius:
+				image.set_pixel(x, y, Color.WHITE)
+	_move_path_dot_texture = ImageTexture.create_from_image(image)
+	return _move_path_dot_texture
 
 
 func _dictionary_or_empty(value: Variant) -> Dictionary:

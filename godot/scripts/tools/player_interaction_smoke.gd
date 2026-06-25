@@ -3376,19 +3376,22 @@ func _expect_move_path_preview_markers(errors: Array[String], game_root: Node, m
 	if marker == null:
 		errors.append("move path preview should create marker nodes")
 		return
-	if not (marker is MeshInstance3D):
-		errors.append("move path preview marker should remain MeshInstance3D")
+	if not (marker is Sprite3D):
+		errors.append("move path preview marker should render Sprite3D pixel dots")
 	else:
-		var marker_mesh := (marker as MeshInstance3D).mesh
-		if not (marker_mesh is CylinderMesh):
-			errors.append("move path preview marker should use CylinderMesh dots")
-		var marker_material := (marker as MeshInstance3D).material_override as StandardMaterial3D
-		if marker_material == null:
-			errors.append("move path preview marker should expose material")
-		elif marker_material.albedo_color.r < 0.99 \
-				or marker_material.albedo_color.g < 0.99 \
-				or marker_material.albedo_color.b < 0.99:
+		var sprite := marker as Sprite3D
+		if sprite.texture == null:
+			errors.append("move path preview marker should expose pixel dot texture")
+		if sprite.modulate.r < 0.99 \
+				or sprite.modulate.g < 0.99 \
+				or sprite.modulate.b < 0.99:
 			errors.append("move path preview marker should use white dots")
+		if sprite.modulate.a >= 0.5:
+			errors.append("move path preview marker should stay translucent")
+		if not sprite.no_depth_test:
+			errors.append("move path preview marker should keep no-depth-test overlay behavior")
+		if float(sprite.get_meta("world_diameter", 0.0)) > 0.25:
+			errors.append("move path preview marker should use reduced world diameter")
 	if int(marker.get_meta("path_index", -1)) != 0:
 		errors.append("first move path marker should expose path index")
 	if not bool(marker.get_meta("reachable", false)):
