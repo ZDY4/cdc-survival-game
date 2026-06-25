@@ -19,6 +19,7 @@
 
 ## Notes
 
-- 当前 smoke 全部通过 `D:\godot\godot.cmd --headless --path godot --script ...` 执行。
+- Godot 命令解析优先级为：显式 `-Godot` 参数、环境变量 `GODOT`、PATH 中的 `godot` / `godot.exe` / `godot.cmd`、`D:\godot\godot.cmd`。
+- 当前 smoke 全部通过解析出的 Godot 命令执行 `--headless --path godot --script ...`。
 - 单场景复核可使用 `-Scenario EditorHandoff`、`-Scenario ContentEditors`、`-Scenario MapReview`、`-Scenario MapTilePalette`、`-Scenario ContentEdit`。
 - `MapTilePalette` 在临时 map scene 中测试 palette 加载、建筑 tile 放置、prop wrapper 创建、marker 创建、旋转和删除，不写入真实地图场景。

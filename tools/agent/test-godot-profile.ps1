@@ -26,7 +26,8 @@ Directory for console logs and JSON result output. Defaults to
 `.local/agent-smoke/godot_profile`.
 
 .PARAMETER Godot
-Path to the Godot command line entrypoint.
+Path to the Godot command line entrypoint. If omitted, resolves from the `GODOT` environment variable,
+then PATH, then `D:\godot\godot.cmd`.
 
 .PARAMETER Headless
 Run Godot in headless mode. Visible mode is the default so input, camera,
@@ -56,7 +57,7 @@ param(
 
     [string]$OutputRoot,
 
-    [string]$Godot = "D:\godot\godot.cmd",
+    [string]$Godot,
 
     [switch]$Headless
 )
@@ -64,13 +65,13 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
+. (Join-Path $PSScriptRoot "godot-env.ps1")
+
 $repoRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot "..\.."))
 if ([string]::IsNullOrWhiteSpace($OutputRoot)) {
     $OutputRoot = Join-Path $repoRoot ".local\agent-smoke\godot_profile"
 }
-if (-not (Test-Path -LiteralPath $Godot)) {
-    throw "Godot command not found: $Godot"
-}
+$Godot = Resolve-AgentGodotCommand -Godot $Godot
 
 $runStamp = Get-Date -Format "yyyyMMdd-HHmmss"
 $runRoot = Join-Path $OutputRoot $runStamp

@@ -3,7 +3,7 @@
 Runs the Godot content CLI for repo-local content inspection and validation.
 
 .DESCRIPTION
-Wraps `D:\godot\godot.cmd --headless --path godot --script res://scripts/tools/content_cli.gd -- ...`.
+Wraps the resolved Godot command with `--headless --path godot --script res://scripts/tools/content_cli.gd -- ...`.
 This is the Godot migration replacement path for common `content_tools` locate,
 summarize, references, validate, format, diff-summary, and asset-manifest commands.
 `validate changed` filters Git status to migrated content domains and prints a
@@ -24,7 +24,8 @@ changed for `diff-summary changed`, all for `asset-manifest all`, or path for `d
 Content id for locate/summarize/references/validate/format, or the path for diff-summary.
 
 .PARAMETER Godot
-Path to the Godot command line entrypoint.
+Path to the Godot command line entrypoint. If omitted, resolves from the `GODOT` environment variable,
+then PATH, then `D:\godot\godot.cmd`.
 
 .PARAMETER DryRun
 Preview `format` / `format changed` / `fix changed` rewrites without writing files.
@@ -82,7 +83,7 @@ param(
     [string]$Id,
 
     [Parameter(Mandatory = $false)]
-    [string]$Godot = "D:\godot\godot.cmd",
+    [string]$Godot,
 
     [Parameter(Mandatory = $false)]
     [switch]$DryRun
@@ -90,11 +91,11 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+. (Join-Path $PSScriptRoot "godot-env.ps1")
+
 $repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..\..")
 $godotProject = Join-Path $repoRoot "godot"
-if (-not (Test-Path -LiteralPath $Godot)) {
-    throw "Godot command not found: $Godot"
-}
+$Godot = Resolve-AgentGodotCommand -Godot $Godot
 if (-not (Test-Path -LiteralPath $godotProject)) {
     throw "Godot project not found: $godotProject"
 }

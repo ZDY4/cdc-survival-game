@@ -20,7 +20,8 @@ Smoke scenario to run. Use `All` to run every migrated Godot smoke scenario.
 Directory for console logs and JSON result output. Defaults to `.local/agent-smoke/godot_game`.
 
 .PARAMETER Godot
-Path to the Godot command line entrypoint.
+Path to the Godot command line entrypoint. If omitted, resolves from the `GODOT` environment variable,
+then PATH, then `D:\godot\godot.cmd`.
 
 .EXAMPLE
 pwsh -NoProfile -File tools/agent/test-godot-game.ps1
@@ -77,19 +78,19 @@ param(
 
     [string]$OutputRoot,
 
-    [string]$Godot = "D:\godot\godot.cmd"
+    [string]$Godot
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
+. (Join-Path $PSScriptRoot "godot-env.ps1")
+
 $repoRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot "..\.."))
 if ([string]::IsNullOrWhiteSpace($OutputRoot)) {
     $OutputRoot = Join-Path $repoRoot ".local\agent-smoke\godot_game"
 }
-if (-not (Test-Path -LiteralPath $Godot)) {
-    throw "Godot command not found: $Godot"
-}
+$Godot = Resolve-AgentGodotCommand -Godot $Godot
 
 $scenarioScripts = [ordered]@{
     MigrationGuard   = "res://scripts/tools/mainline_migration_guard.gd"

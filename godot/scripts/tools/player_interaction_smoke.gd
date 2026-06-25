@@ -3268,8 +3268,6 @@ func _expect_ground_hover_move_preview(errors: Array[String], game_root: Node, c
 		errors.append("ground hover should include move preview")
 	elif not bool(move_preview.get("reachable", false)):
 		errors.append("ground hover preview should be reachable: %s" % move_preview.get("reason", "unknown"))
-	elif bool(move_preview.get("ap_affordable", true)):
-		errors.append("ground hover preview should expose AP-insufficient pending state")
 	_expect_ground_hover_cursor_preview(errors, game_root)
 	_expect_move_path_preview_markers(errors, game_root, move_preview)
 	_expect_same_ground_hover_reuses_move_path_preview_markers(errors, game_root, hover_screen_position)
@@ -3346,6 +3344,9 @@ func _expect_ground_hover_cursor_preview(errors: Array[String], game_root: Node)
 		errors.append("ground hover cursor should expose reachable move state")
 	if int(cursor.get_meta("move_steps", 0)) < 0:
 		errors.append("ground hover cursor should expose non-negative move steps")
+	for legacy_ap_hint in ["move_ap_affordable", "move_affordable_steps", "move_requires_pending"]:
+		if cursor.has_meta(legacy_ap_hint):
+			errors.append("ground hover cursor should not expose AP affordability hint %s" % legacy_ap_hint)
 	var material := cursor.material_override as StandardMaterial3D
 	if material == null:
 		errors.append("ground hover cursor should expose material")
@@ -3368,14 +3369,9 @@ func _expect_move_path_preview_markers(errors: Array[String], game_root: Node, m
 		errors.append("move path container should expose path length")
 	if not bool(container.get_meta("reachable", false)):
 		errors.append("move path container should expose reachable state")
-	if bool(container.get_meta("ap_affordable", true)):
-		errors.append("move path container should expose AP affordability")
-	if not bool(container.get_meta("requires_pending", false)):
-		errors.append("move path container should expose pending requirement")
-	if int(container.get_meta("affordable_steps", -1)) != 0:
-		errors.append("move path container should expose affordable steps")
-	if int(container.get_meta("pending_steps", 0)) <= 0:
-		errors.append("move path container should expose pending steps")
+	for legacy_ap_hint in ["ap_affordable", "affordable_steps", "requires_pending", "pending_steps"]:
+		if container.has_meta(legacy_ap_hint):
+			errors.append("move path container should not expose AP affordability hint %s" % legacy_ap_hint)
 	var marker: Node = container.find_child("MovePathPreviewMarker", true, false)
 	if marker == null:
 		errors.append("move path preview should create marker nodes")
@@ -3401,15 +3397,15 @@ func _expect_move_path_preview_markers(errors: Array[String], game_root: Node, m
 		errors.append("move path marker should expose grid metadata")
 	if int(marker.get_meta("step_cost", -1)) != 0:
 		errors.append("first move path marker should expose zero step cost")
-	if not bool(marker.get_meta("within_current_ap", false)):
-		errors.append("first move path marker should be within current AP")
-	var pending_marker: Node = null
+	for legacy_marker_hint in ["within_current_ap", "requires_pending"]:
+		if marker.has_meta(legacy_marker_hint):
+			errors.append("move path marker should not expose AP affordability hint %s" % legacy_marker_hint)
 	for child in container.get_children():
-		if child is Node and bool((child as Node).get_meta("requires_pending", false)):
-			pending_marker = child
-			break
-	if pending_marker == null:
-		errors.append("move path preview should mark cells beyond current AP as pending")
+		if child is Node:
+			for legacy_marker_hint in ["within_current_ap", "requires_pending"]:
+				if (child as Node).has_meta(legacy_marker_hint):
+					errors.append("move path preview should not mark cells by current AP using %s" % legacy_marker_hint)
+					return
 
 
 func _expect_same_ground_hover_reuses_move_path_preview_markers(errors: Array[String], game_root: Node, screen_position: Vector2) -> void:

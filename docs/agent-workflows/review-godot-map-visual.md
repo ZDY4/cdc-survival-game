@@ -20,5 +20,6 @@
 
 ## Notes
 
+- Godot 命令解析优先级为：显式 `-Godot` 参数、环境变量 `GODOT`、PATH 中的 `godot` / `godot.exe` / `godot.cmd`、`D:\godot\godot.cmd`。
 - 当前 Godot map 复核入口提供 editor dock 里的结构化摘要、引用预览、地图预览和打开 `.tscn` 场景的入口；地图布局编辑交给 Godot 场景编辑器，复核摘要来自 scene 导出的 map definition。
 - 如只想看内容摘要而暂时不跑 world/scene smoke，可加 `-NoSmoke`。

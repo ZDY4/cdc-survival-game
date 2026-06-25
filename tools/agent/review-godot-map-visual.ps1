@@ -15,7 +15,8 @@ Map id to review.
 When set, only print content review information and skip Godot world/scene smoke checks.
 
 .PARAMETER Godot
-Path to the Godot command line entrypoint.
+Path to the Godot command line entrypoint. If omitted, resolves from the `GODOT` environment variable,
+then PATH, then `D:\godot\godot.cmd`.
 
 .EXAMPLE
 pwsh -NoProfile -File tools/agent/review-godot-map-visual.ps1 -Map survivor_outpost_01
@@ -34,11 +35,13 @@ param(
 
     [switch]$NoSmoke,
 
-    [string]$Godot = "D:\godot\godot.cmd"
+    [string]$Godot
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
+
+. (Join-Path $PSScriptRoot "godot-env.ps1")
 
 function Invoke-Step {
     param(
@@ -67,6 +70,7 @@ if ([string]::IsNullOrWhiteSpace($Map)) {
 $repoRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot "..\.."))
 $godotContentScript = Join-Path $repoRoot "tools/agent/godot-content.ps1"
 $godotSmokeScript = Join-Path $repoRoot "tools/agent/test-godot-game.ps1"
+$Godot = Resolve-AgentGodotCommand -Godot $Godot
 
 if (-not (Test-Path -LiteralPath $godotContentScript)) {
     throw "Godot content wrapper not found: $godotContentScript"

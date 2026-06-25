@@ -6,7 +6,7 @@ Open or reuse the Godot editor and select a specific content record.
 This script is the Godot migration handoff entry for editor review and manual refinement.
 It writes a navigation request to `tmp/editor_handoff/godot_editor.navigation.json`.
 If a recent Godot editor session exists, the CDC Agent Handoff dock will pick up the request.
-If no recent session exists, the script starts `D:\godot\godot.cmd --editor --path godot`.
+If no recent session exists, the script starts the resolved Godot command with `--editor --path godot`.
 
 .PARAMETER Item
 Numeric item id to open in the Godot editor handoff dock.
@@ -39,7 +39,8 @@ Overworld id to open in the Godot editor handoff dock.
 Map id to open in the Godot editor handoff dock.
 
 .PARAMETER Godot
-Path to the Godot command line entrypoint.
+Path to the Godot command line entrypoint. If omitted, resolves from the `GODOT` environment variable,
+then PATH, then `D:\godot\godot.cmd`.
 
 .EXAMPLE
 pwsh -NoProfile -File tools/agent/open-godot-editor.ps1 -Item 1001
@@ -71,11 +72,13 @@ param(
     [string]$Settlement,
     [string]$Overworld,
     [string]$Map,
-    [string]$Godot = "D:\godot\godot.cmd"
+    [string]$Godot
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
+
+. (Join-Path $PSScriptRoot "godot-env.ps1")
 
 function Get-UnixTimeMilliseconds {
     return [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()
@@ -172,9 +175,7 @@ $requestedTargets = @(
 if ($requestedTargets.Count -ne 1) {
     throw "use exactly one of -Item, -Recipe, -Dialogue, -Quest, -Character, -Skill, -SkillTree, -Settlement, -Overworld, or -Map"
 }
-if (-not (Test-Path -LiteralPath $Godot)) {
-    throw "Godot command not found: $Godot"
-}
+$Godot = Resolve-AgentGodotCommand -Godot $Godot
 
 $repoRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot "..\.."))
 $godotProject = Join-Path $repoRoot "godot"

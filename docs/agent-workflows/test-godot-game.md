@@ -19,7 +19,8 @@
 
 ## Notes
 
-- 当前 smoke 全部通过 `D:\godot\godot.cmd --headless --path godot --script ...` 执行。
+- Godot 命令解析优先级为：显式 `-Godot` 参数、环境变量 `GODOT`、PATH 中的 `godot` / `godot.exe` / `godot.cmd`、`D:\godot\godot.cmd`。
+- 当前 smoke 全部通过解析出的 Godot 命令执行 `--headless --path godot --script ...`。
 - `HeadlessNewGame` 和 `HeadlessWorld` 通过 `godot/scripts/app/headless_runner.gd` 覆盖 headless 启动入口。
 - 默认 runtime scene 入口是 `godot/scenes/game/game_root.tscn`。
 - `MigrationGuard` 会执行 `godot/scripts/tools/mainline_migration_guard.gd`，确认 Godot 版本为 `4.6.3`，且当前主线没有重新引入 Rust / Cargo / Bevy 时代源码文件。

@@ -19,7 +19,8 @@
 
 ## Notes
 
-- `Import` 调用 `D:\godot\godot.cmd --headless --editor --import --quit --path godot`。
-- `CheckOnly` 遍历 `godot/**/*.gd`，逐个调用 `D:\godot\godot.cmd --headless --path godot --check-only --script res://...`。
+- Godot 命令解析优先级为：显式 `-Godot` 参数、环境变量 `GODOT`、PATH 中的 `godot` / `godot.exe` / `godot.cmd`、`D:\godot\godot.cmd`。
+- `Import` 调用解析出的 Godot 命令执行 `--headless --editor --import --quit --path godot`。
+- `CheckOnly` 遍历 `godot/**/*.gd`，逐个调用解析出的 Godot 命令执行 `--headless --path godot --check-only --script res://...`。
 - 输出写入 `.local/agent-smoke/godot_static/<timestamp>/`。
 - 不包含 Godot Mono / .NET、Linux setup、pre-commit 或 CI 安装逻辑。

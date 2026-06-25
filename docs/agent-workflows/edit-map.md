@@ -42,7 +42,7 @@
 - `pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command format -Kind map -Id <id>`
 - `pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command validate -Kind map -Id <id>`
 - `pwsh -NoProfile -File tools/agent/review-godot-map-visual.ps1 -Map <id>`
-- `D:\godot\godot.cmd --headless --path godot --script res://scripts/tools/world_tile_resource_validate.gd`
+- `& $env:GODOT --headless --path godot --script res://scripts/tools/world_tile_resource_validate.gd`
 
 如需进入 editor 复核或手工精修：
 

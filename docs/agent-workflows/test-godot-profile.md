@@ -19,6 +19,7 @@
 
 ## Notes
 
+- Godot 命令解析优先级为：显式 `-Godot` 参数、环境变量 `GODOT`、PATH 中的 `godot` / `godot.exe` / `godot.cmd`、`D:\godot\godot.cmd`。
 - 当前默认场景是 `MovementClickRepeat`，会加载真实 `godot/scenes/game/game_root.tscn`，在启动地图上发真实 Godot 鼠标输入事件，等待玩家控制角色移动到目标格，再重复。
 - 默认以可见 Godot 窗口运行，因为输入事件、相机、physics picking 和帧循环更接近交互 runtime；需要 headless 环境时可加 `-Headless`。
 - 当前启动 runtime 默认地图是 `survivor_outpost_01`。`-Map` 参数用于校验期望地图；后续若启动参数支持任意地图，可复用同一入口扩展。
