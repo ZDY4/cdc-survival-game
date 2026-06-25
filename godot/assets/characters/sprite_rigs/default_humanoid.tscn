@@ -1,28 +1,32 @@
-[gd_scene format=3]
+[gd_scene format=3 uid="uid://cybqbygjyrrlt"]
 
-[ext_resource type="Script" path="res://scripts/characters/character_sprite_rig.gd" id="1_cjkmm"]
-[ext_resource type="Resource" path="res://assets/characters/sprite_rigs/default_humanoid/default_humanoid_sprite_rig.tres" id="2_ctqfv"]
-[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/pelvis/yaw_000_pitch_0.png" id="3_pelvis_default"]
-[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/spine_01/yaw_000_pitch_0.png" id="4_spine_01_default"]
-[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/spine_02/yaw_000_pitch_0.png" id="5_spine_02_default"]
-[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/neck/yaw_000_pitch_0.png" id="6_neck_default"]
-[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/head/yaw_000_pitch_0.png" id="7_head_default"]
-[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/upper_arm_l/yaw_000_pitch_0.png" id="8_upper_arm_l_default"]
-[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/lower_arm_l/yaw_000_pitch_0.png" id="9_lower_arm_l_default"]
-[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/hand_l/yaw_000_pitch_0.png" id="10_hand_l_default"]
-[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/upper_arm_r/yaw_000_pitch_0.png" id="11_upper_arm_r_default"]
-[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/lower_arm_r/yaw_000_pitch_0.png" id="12_lower_arm_r_default"]
-[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/hand_r/yaw_000_pitch_0.png" id="13_hand_r_default"]
-[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/thigh_l/yaw_000_pitch_0.png" id="14_thigh_l_default"]
-[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/calf_l/yaw_000_pitch_0.png" id="15_calf_l_default"]
-[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/foot_l/yaw_000_pitch_0.png" id="16_foot_l_default"]
-[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/thigh_r/yaw_000_pitch_0.png" id="17_thigh_r_default"]
-[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/calf_r/yaw_000_pitch_0.png" id="18_calf_r_default"]
-[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/foot_r/yaw_000_pitch_0.png" id="19_foot_r_default"]
+[ext_resource type="Script" uid="uid://byc1bunepvtr8" path="res://scripts/characters/character_sprite_rig.gd" id="1_cjkmm"]
+[ext_resource type="Resource" uid="uid://c0dfexytbphpj" path="res://assets/characters/sprite_rigs/default_humanoid/default_humanoid_sprite_rig.tres" id="2_ctqfv"]
+[ext_resource type="Texture2D" uid="uid://xh1qrbcofoap" path="res://assets/characters/sprite_rigs/default_humanoid/pelvis/yaw_000_pitch_45.png" id="3_0xwyo"]
+[ext_resource type="Texture2D" uid="uid://b407u0ew6kegh" path="res://assets/characters/sprite_rigs/default_humanoid/spine_01/yaw_000_pitch_45.png" id="4_1fev4"]
+[ext_resource type="Texture2D" uid="uid://btfyg52paweqq" path="res://assets/characters/sprite_rigs/default_humanoid/spine_02/yaw_000_pitch_45.png" id="5_trraj"]
+[ext_resource type="Texture2D" uid="uid://bpkm8h2utlgac" path="res://assets/characters/sprite_rigs/default_humanoid/neck/yaw_000_pitch_45.png" id="6_xdpwa"]
+[ext_resource type="Texture2D" uid="uid://f1y22xftpk1w" path="res://assets/characters/sprite_rigs/default_humanoid/head/yaw_000_pitch_45.png" id="7_sfbrl"]
+[ext_resource type="Texture2D" uid="uid://bnua0gegjs5mo" path="res://assets/characters/sprite_rigs/default_humanoid/upper_arm_l/yaw_000_pitch_45.png" id="8_8g4ul"]
+[ext_resource type="Texture2D" uid="uid://dxxpfcupl3lcj" path="res://assets/characters/sprite_rigs/default_humanoid/lower_arm_l/yaw_000_pitch_45.png" id="9_q67mo"]
+[ext_resource type="Texture2D" uid="uid://b1bmy8rn5wtv5" path="res://assets/characters/sprite_rigs/default_humanoid/hand_l/yaw_000_pitch_45.png" id="10_r715w"]
+[ext_resource type="Texture2D" uid="uid://bqebsv4yjnx7d" path="res://assets/characters/sprite_rigs/default_humanoid/upper_arm_r/yaw_000_pitch_45.png" id="11_yh528"]
+[ext_resource type="Texture2D" uid="uid://brbnjfl0mpnv" path="res://assets/characters/sprite_rigs/default_humanoid/lower_arm_r/yaw_000_pitch_45.png" id="12_v88xd"]
+[ext_resource type="Texture2D" uid="uid://dill03lb5dn5d" path="res://assets/characters/sprite_rigs/default_humanoid/hand_r/yaw_000_pitch_45.png" id="13_2agae"]
+[ext_resource type="Texture2D" uid="uid://cqfj7dfh6boen" path="res://assets/characters/sprite_rigs/default_humanoid/thigh_l/yaw_000_pitch_45.png" id="14_d67hr"]
+[ext_resource type="Texture2D" uid="uid://c6ribjc53c7fg" path="res://assets/characters/sprite_rigs/default_humanoid/calf_l/yaw_000_pitch_45.png" id="15_3kag5"]
+[ext_resource type="Texture2D" uid="uid://bja0i6wuylnqb" path="res://assets/characters/sprite_rigs/default_humanoid/foot_l/yaw_000_pitch_45.png" id="16_kaj87"]
+[ext_resource type="Texture2D" uid="uid://y6peauk0kfwv" path="res://assets/characters/sprite_rigs/default_humanoid/thigh_r/yaw_000_pitch_45.png" id="17_hs7qf"]
+[ext_resource type="Texture2D" uid="uid://bvwkbgkpg84q8" path="res://assets/characters/sprite_rigs/default_humanoid/calf_r/yaw_000_pitch_45.png" id="18_vuo2h"]
+[ext_resource type="Texture2D" uid="uid://cuvrn0uevj7iu" path="res://assets/characters/sprite_rigs/default_humanoid/foot_r/yaw_000_pitch_45.png" id="19_13xgu"]
 
 [node name="DefaultHumanoidSpriteRig" type="Node3D" unique_id=1863892137]
 script = ExtResource("1_cjkmm")
 profile = ExtResource("2_ctqfv")
+metadata/direction_refresh_count = 234
+metadata/direction_key = "yaw_000_pitch_45"
+metadata/camera_yaw_degrees = 0
+metadata/camera_pitch_degrees = 45
 
 [node name="SpriteRigSkeleton" type="Skeleton3D" parent="." unique_id=1360258991]
 bones/0/name = "pelvis"
@@ -65,7 +69,7 @@ bones/5/parent = 2
 bones/5/rest = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.26, 0.1, 0)
 bones/5/enabled = true
 bones/5/position = Vector3(-0.26, 0.1, 0)
-bones/5/rotation = Quaternion(0, 0, 0, 1)
+bones/5/rotation = Quaternion(0, 0.195, 0, 1)
 bones/5/scale = Vector3(1, 1, 1)
 bones/6/name = "lower_arm_l"
 bones/6/parent = 5
@@ -145,151 +149,270 @@ bones/16/position = Vector3(0, -0.26, 0.04)
 bones/16/rotation = Quaternion(0, 0, 0, 1)
 bones/16/scale = Vector3(1, 1, 1)
 
-[node name="SpriteRigAttachment_pelvis" type="BoneAttachment3D" parent="SpriteRigSkeleton"]
+[node name="SpriteRigAttachment_pelvis" type="BoneAttachment3D" parent="SpriteRigSkeleton" unique_id=675460360]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.48, 0)
 bone_name = "pelvis"
+bone_idx = 0
 
-[node name="SpriteRigSprite_pelvis" type="Sprite3D" parent="SpriteRigSkeleton/SpriteRigAttachment_pelvis"]
-position = Vector3(0, 0.06, 0)
+[node name="SpriteRigSprite_pelvis" type="Sprite3D" parent="SpriteRigSkeleton/SpriteRigAttachment_pelvis" unique_id=27860222]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.06, 0)
+sorting_offset = 0.008
 pixel_size = 0.003
 billboard = 1
-texture = ExtResource("3_pelvis_default")
+render_priority = 8
+texture = ExtResource("3_0xwyo")
+metadata/draw_order = 8
+metadata/direction_key = "yaw_000_pitch_45"
+metadata/texture_resource_path = "res://assets/characters/sprite_rigs/default_humanoid/pelvis/yaw_000_pitch_45.png"
 
-[node name="SpriteRigAttachment_spine_01" type="BoneAttachment3D" parent="SpriteRigSkeleton"]
+[node name="SpriteRigAttachment_spine_01" type="BoneAttachment3D" parent="SpriteRigSkeleton" unique_id=93233702]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.76, 0)
 bone_name = "spine_01"
+bone_idx = 1
 
-[node name="SpriteRigSprite_spine_01" type="Sprite3D" parent="SpriteRigSkeleton/SpriteRigAttachment_spine_01"]
-position = Vector3(0, 0.12, 0)
+[node name="SpriteRigSprite_spine_01" type="Sprite3D" parent="SpriteRigSkeleton/SpriteRigAttachment_spine_01" unique_id=1552271771]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.12, 0)
+sorting_offset = 0.012
 pixel_size = 0.0031
 billboard = 1
-texture = ExtResource("4_spine_01_default")
+render_priority = 12
+texture = ExtResource("4_1fev4")
+metadata/draw_order = 12
+metadata/direction_key = "yaw_000_pitch_45"
+metadata/texture_resource_path = "res://assets/characters/sprite_rigs/default_humanoid/spine_01/yaw_000_pitch_45.png"
 
-[node name="SpriteRigAttachment_spine_02" type="BoneAttachment3D" parent="SpriteRigSkeleton"]
+[node name="SpriteRigAttachment_spine_02" type="BoneAttachment3D" parent="SpriteRigSkeleton" unique_id=413985440]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.04, 0)
 bone_name = "spine_02"
+bone_idx = 2
 
-[node name="SpriteRigSprite_spine_02" type="Sprite3D" parent="SpriteRigSkeleton/SpriteRigAttachment_spine_02"]
-position = Vector3(0, 0.1, 0)
+[node name="SpriteRigSprite_spine_02" type="Sprite3D" parent="SpriteRigSkeleton/SpriteRigAttachment_spine_02" unique_id=1958740997]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.1, 0)
+sorting_offset = 0.016
 pixel_size = 0.0032
 billboard = 1
-texture = ExtResource("5_spine_02_default")
+render_priority = 16
+texture = ExtResource("5_trraj")
+metadata/draw_order = 16
+metadata/direction_key = "yaw_000_pitch_45"
+metadata/texture_resource_path = "res://assets/characters/sprite_rigs/default_humanoid/spine_02/yaw_000_pitch_45.png"
 
-[node name="SpriteRigAttachment_neck" type="BoneAttachment3D" parent="SpriteRigSkeleton"]
+[node name="SpriteRigAttachment_neck" type="BoneAttachment3D" parent="SpriteRigSkeleton" unique_id=1367997932]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.1999999, 0)
 bone_name = "neck"
+bone_idx = 3
 
-[node name="SpriteRigSprite_neck" type="Sprite3D" parent="SpriteRigSkeleton/SpriteRigAttachment_neck"]
-position = Vector3(0, 0.05, 0)
+[node name="SpriteRigSprite_neck" type="Sprite3D" parent="SpriteRigSkeleton/SpriteRigAttachment_neck" unique_id=706679700]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.05, 0)
+sorting_offset = 0.024
 pixel_size = 0.0024
 billboard = 1
-texture = ExtResource("6_neck_default")
+render_priority = 24
+texture = ExtResource("6_xdpwa")
+metadata/draw_order = 24
+metadata/direction_key = "yaw_000_pitch_45"
+metadata/texture_resource_path = "res://assets/characters/sprite_rigs/default_humanoid/neck/yaw_000_pitch_45.png"
 
-[node name="SpriteRigAttachment_head" type="BoneAttachment3D" parent="SpriteRigSkeleton"]
+[node name="SpriteRigAttachment_head" type="BoneAttachment3D" parent="SpriteRigSkeleton" unique_id=882921886]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.3799999, 0)
 bone_name = "head"
+bone_idx = 4
 
-[node name="SpriteRigSprite_head" type="Sprite3D" parent="SpriteRigSkeleton/SpriteRigAttachment_head"]
-position = Vector3(0, 0.03, 0)
+[node name="SpriteRigSprite_head" type="Sprite3D" parent="SpriteRigSkeleton/SpriteRigAttachment_head" unique_id=1036373044]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.03, 0)
+sorting_offset = 0.03
 pixel_size = 0.003
 billboard = 1
-texture = ExtResource("7_head_default")
+render_priority = 30
+texture = ExtResource("7_sfbrl")
+metadata/draw_order = 30
+metadata/direction_key = "yaw_000_pitch_45"
+metadata/texture_resource_path = "res://assets/characters/sprite_rigs/default_humanoid/head/yaw_000_pitch_45.png"
 
-[node name="SpriteRigAttachment_upper_arm_l" type="BoneAttachment3D" parent="SpriteRigSkeleton"]
+[node name="SpriteRigAttachment_upper_arm_l" type="BoneAttachment3D" parent="SpriteRigSkeleton" unique_id=1417609813]
+transform = Transform3D(0.9267359, 0, 0.37571347, 0, 1, 0, -0.37571347, 0, 0.9267359, -0.26, 1.14, 0)
 bone_name = "upper_arm_l"
+bone_idx = 5
 
-[node name="SpriteRigSprite_upper_arm_l" type="Sprite3D" parent="SpriteRigSkeleton/SpriteRigAttachment_upper_arm_l"]
-position = Vector3(-0.1, -0.06, 0)
+[node name="SpriteRigSprite_upper_arm_l" type="Sprite3D" parent="SpriteRigSkeleton/SpriteRigAttachment_upper_arm_l" unique_id=134550812]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.1, -0.06, 0)
+sorting_offset = 0.018
 pixel_size = 0.0026
 billboard = 1
-texture = ExtResource("8_upper_arm_l_default")
+render_priority = 18
+texture = ExtResource("8_8g4ul")
+metadata/draw_order = 18
+metadata/direction_key = "yaw_000_pitch_45"
+metadata/texture_resource_path = "res://assets/characters/sprite_rigs/default_humanoid/upper_arm_l/yaw_000_pitch_45.png"
 
-[node name="SpriteRigAttachment_lower_arm_l" type="BoneAttachment3D" parent="SpriteRigSkeleton"]
+[node name="SpriteRigAttachment_lower_arm_l" type="BoneAttachment3D" parent="SpriteRigSkeleton" unique_id=67858131]
+transform = Transform3D(0.9267359, 0, 0.37571347, 0, 1, 0, -0.37571347, 0, 0.9267359, -0.4824166, 1, 0.09017123)
 bone_name = "lower_arm_l"
+bone_idx = 6
 
-[node name="SpriteRigSprite_lower_arm_l" type="Sprite3D" parent="SpriteRigSkeleton/SpriteRigAttachment_lower_arm_l"]
-position = Vector3(-0.08, -0.05, 0)
+[node name="SpriteRigSprite_lower_arm_l" type="Sprite3D" parent="SpriteRigSkeleton/SpriteRigAttachment_lower_arm_l" unique_id=1367340533]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.08, -0.05, 0)
+sorting_offset = 0.019
 pixel_size = 0.0025
 billboard = 1
-texture = ExtResource("9_lower_arm_l_default")
+render_priority = 19
+texture = ExtResource("9_q67mo")
+metadata/draw_order = 19
+metadata/direction_key = "yaw_000_pitch_45"
+metadata/texture_resource_path = "res://assets/characters/sprite_rigs/default_humanoid/lower_arm_l/yaw_000_pitch_45.png"
 
-[node name="SpriteRigAttachment_hand_l" type="BoneAttachment3D" parent="SpriteRigSkeleton"]
+[node name="SpriteRigAttachment_hand_l" type="BoneAttachment3D" parent="SpriteRigSkeleton" unique_id=829346783]
+transform = Transform3D(0.9267359, 0, 0.37571347, 0, 1, 0, -0.37571347, 0, 0.9267359, -0.64922905, 0.88, 0.15779966)
 bone_name = "hand_l"
+bone_idx = 7
 
-[node name="SpriteRigSprite_hand_l" type="Sprite3D" parent="SpriteRigSkeleton/SpriteRigAttachment_hand_l"]
+[node name="SpriteRigSprite_hand_l" type="Sprite3D" parent="SpriteRigSkeleton/SpriteRigAttachment_hand_l" unique_id=281125928]
+sorting_offset = 0.02
 pixel_size = 0.0028
 billboard = 1
-texture = ExtResource("10_hand_l_default")
+render_priority = 20
+texture = ExtResource("10_r715w")
+metadata/draw_order = 20
+metadata/direction_key = "yaw_000_pitch_45"
+metadata/texture_resource_path = "res://assets/characters/sprite_rigs/default_humanoid/hand_l/yaw_000_pitch_45.png"
 
-[node name="SpriteRigAttachment_upper_arm_r" type="BoneAttachment3D" parent="SpriteRigSkeleton"]
+[node name="SpriteRigAttachment_upper_arm_r" type="BoneAttachment3D" parent="SpriteRigSkeleton" unique_id=1801058066]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.26, 1.14, 0)
 bone_name = "upper_arm_r"
+bone_idx = 8
 
-[node name="SpriteRigSprite_upper_arm_r" type="Sprite3D" parent="SpriteRigSkeleton/SpriteRigAttachment_upper_arm_r"]
-position = Vector3(0.1, -0.06, 0)
+[node name="SpriteRigSprite_upper_arm_r" type="Sprite3D" parent="SpriteRigSkeleton/SpriteRigAttachment_upper_arm_r" unique_id=918912987]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.1, -0.06, 0)
+sorting_offset = 0.018
 pixel_size = 0.0026
 billboard = 1
-texture = ExtResource("11_upper_arm_r_default")
+render_priority = 18
+texture = ExtResource("11_yh528")
+metadata/draw_order = 18
+metadata/direction_key = "yaw_000_pitch_45"
+metadata/texture_resource_path = "res://assets/characters/sprite_rigs/default_humanoid/upper_arm_r/yaw_000_pitch_45.png"
 
-[node name="SpriteRigAttachment_lower_arm_r" type="BoneAttachment3D" parent="SpriteRigSkeleton"]
+[node name="SpriteRigAttachment_lower_arm_r" type="BoneAttachment3D" parent="SpriteRigSkeleton" unique_id=1635580583]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.5, 1, 0)
 bone_name = "lower_arm_r"
+bone_idx = 9
 
-[node name="SpriteRigSprite_lower_arm_r" type="Sprite3D" parent="SpriteRigSkeleton/SpriteRigAttachment_lower_arm_r"]
-position = Vector3(0.08, -0.05, 0)
+[node name="SpriteRigSprite_lower_arm_r" type="Sprite3D" parent="SpriteRigSkeleton/SpriteRigAttachment_lower_arm_r" unique_id=914668180]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.08, -0.05, 0)
+sorting_offset = 0.019
 pixel_size = 0.0025
 billboard = 1
-texture = ExtResource("12_lower_arm_r_default")
+render_priority = 19
+texture = ExtResource("12_v88xd")
+metadata/draw_order = 19
+metadata/direction_key = "yaw_000_pitch_45"
+metadata/texture_resource_path = "res://assets/characters/sprite_rigs/default_humanoid/lower_arm_r/yaw_000_pitch_45.png"
 
-[node name="SpriteRigAttachment_hand_r" type="BoneAttachment3D" parent="SpriteRigSkeleton"]
+[node name="SpriteRigAttachment_hand_r" type="BoneAttachment3D" parent="SpriteRigSkeleton" unique_id=542739509]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.68, 0.88, 0)
 bone_name = "hand_r"
+bone_idx = 10
 
-[node name="SpriteRigSprite_hand_r" type="Sprite3D" parent="SpriteRigSkeleton/SpriteRigAttachment_hand_r"]
+[node name="SpriteRigSprite_hand_r" type="Sprite3D" parent="SpriteRigSkeleton/SpriteRigAttachment_hand_r" unique_id=623293418]
+sorting_offset = 0.02
 pixel_size = 0.0028
 billboard = 1
-texture = ExtResource("13_hand_r_default")
+render_priority = 20
+texture = ExtResource("13_2agae")
+metadata/draw_order = 20
+metadata/direction_key = "yaw_000_pitch_45"
+metadata/texture_resource_path = "res://assets/characters/sprite_rigs/default_humanoid/hand_r/yaw_000_pitch_45.png"
 
-[node name="SpriteRigAttachment_thigh_l" type="BoneAttachment3D" parent="SpriteRigSkeleton"]
+[node name="SpriteRigAttachment_thigh_l" type="BoneAttachment3D" parent="SpriteRigSkeleton" unique_id=212173693]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.13, 0.17999998, 0)
 bone_name = "thigh_l"
+bone_idx = 11
 
-[node name="SpriteRigSprite_thigh_l" type="Sprite3D" parent="SpriteRigSkeleton/SpriteRigAttachment_thigh_l"]
-position = Vector3(0, -0.12, 0)
+[node name="SpriteRigSprite_thigh_l" type="Sprite3D" parent="SpriteRigSkeleton/SpriteRigAttachment_thigh_l" unique_id=153176795]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.12, 0)
+sorting_offset = 0.006
 pixel_size = 0.0028
 billboard = 1
-texture = ExtResource("14_thigh_l_default")
+render_priority = 6
+texture = ExtResource("14_d67hr")
+metadata/draw_order = 6
+metadata/direction_key = "yaw_000_pitch_45"
+metadata/texture_resource_path = "res://assets/characters/sprite_rigs/default_humanoid/thigh_l/yaw_000_pitch_45.png"
 
-[node name="SpriteRigAttachment_calf_l" type="BoneAttachment3D" parent="SpriteRigSkeleton"]
+[node name="SpriteRigAttachment_calf_l" type="BoneAttachment3D" parent="SpriteRigSkeleton" unique_id=960307449]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.13, -0.16000003, 0)
 bone_name = "calf_l"
+bone_idx = 12
 
-[node name="SpriteRigSprite_calf_l" type="Sprite3D" parent="SpriteRigSkeleton/SpriteRigAttachment_calf_l"]
-position = Vector3(0, -0.1, 0)
+[node name="SpriteRigSprite_calf_l" type="Sprite3D" parent="SpriteRigSkeleton/SpriteRigAttachment_calf_l" unique_id=870640431]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.1, 0)
+sorting_offset = 0.005
 pixel_size = 0.0026
 billboard = 1
-texture = ExtResource("15_calf_l_default")
+render_priority = 5
+texture = ExtResource("15_3kag5")
+metadata/draw_order = 5
+metadata/direction_key = "yaw_000_pitch_45"
+metadata/texture_resource_path = "res://assets/characters/sprite_rigs/default_humanoid/calf_l/yaw_000_pitch_45.png"
 
-[node name="SpriteRigAttachment_foot_l" type="BoneAttachment3D" parent="SpriteRigSkeleton"]
+[node name="SpriteRigAttachment_foot_l" type="BoneAttachment3D" parent="SpriteRigSkeleton" unique_id=232222636]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.13, -0.42000002, 0.04)
 bone_name = "foot_l"
+bone_idx = 13
 
-[node name="SpriteRigSprite_foot_l" type="Sprite3D" parent="SpriteRigSkeleton/SpriteRigAttachment_foot_l"]
+[node name="SpriteRigSprite_foot_l" type="Sprite3D" parent="SpriteRigSkeleton/SpriteRigAttachment_foot_l" unique_id=2130976790]
+sorting_offset = 0.004
 pixel_size = 0.0028
 billboard = 1
-texture = ExtResource("16_foot_l_default")
+render_priority = 4
+texture = ExtResource("16_kaj87")
+metadata/draw_order = 4
+metadata/direction_key = "yaw_000_pitch_45"
+metadata/texture_resource_path = "res://assets/characters/sprite_rigs/default_humanoid/foot_l/yaw_000_pitch_45.png"
 
-[node name="SpriteRigAttachment_thigh_r" type="BoneAttachment3D" parent="SpriteRigSkeleton"]
+[node name="SpriteRigAttachment_thigh_r" type="BoneAttachment3D" parent="SpriteRigSkeleton" unique_id=944765678]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.13, 0.17999998, 0)
 bone_name = "thigh_r"
+bone_idx = 14
 
-[node name="SpriteRigSprite_thigh_r" type="Sprite3D" parent="SpriteRigSkeleton/SpriteRigAttachment_thigh_r"]
-position = Vector3(0, -0.12, 0)
+[node name="SpriteRigSprite_thigh_r" type="Sprite3D" parent="SpriteRigSkeleton/SpriteRigAttachment_thigh_r" unique_id=1245657636]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.12, 0)
+sorting_offset = 0.006
 pixel_size = 0.0028
 billboard = 1
-texture = ExtResource("17_thigh_r_default")
+render_priority = 6
+texture = ExtResource("17_hs7qf")
+metadata/draw_order = 6
+metadata/direction_key = "yaw_000_pitch_45"
+metadata/texture_resource_path = "res://assets/characters/sprite_rigs/default_humanoid/thigh_r/yaw_000_pitch_45.png"
 
-[node name="SpriteRigAttachment_calf_r" type="BoneAttachment3D" parent="SpriteRigSkeleton"]
+[node name="SpriteRigAttachment_calf_r" type="BoneAttachment3D" parent="SpriteRigSkeleton" unique_id=644273699]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.13, -0.16000003, 0)
 bone_name = "calf_r"
+bone_idx = 15
 
-[node name="SpriteRigSprite_calf_r" type="Sprite3D" parent="SpriteRigSkeleton/SpriteRigAttachment_calf_r"]
-position = Vector3(0, -0.1, 0)
+[node name="SpriteRigSprite_calf_r" type="Sprite3D" parent="SpriteRigSkeleton/SpriteRigAttachment_calf_r" unique_id=735330150]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.1, 0)
+sorting_offset = 0.005
 pixel_size = 0.0026
 billboard = 1
-texture = ExtResource("18_calf_r_default")
+render_priority = 5
+texture = ExtResource("18_vuo2h")
+metadata/draw_order = 5
+metadata/direction_key = "yaw_000_pitch_45"
+metadata/texture_resource_path = "res://assets/characters/sprite_rigs/default_humanoid/calf_r/yaw_000_pitch_45.png"
 
-[node name="SpriteRigAttachment_foot_r" type="BoneAttachment3D" parent="SpriteRigSkeleton"]
+[node name="SpriteRigAttachment_foot_r" type="BoneAttachment3D" parent="SpriteRigSkeleton" unique_id=1156699778]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.13, -0.42000002, 0.04)
 bone_name = "foot_r"
+bone_idx = 16
 
-[node name="SpriteRigSprite_foot_r" type="Sprite3D" parent="SpriteRigSkeleton/SpriteRigAttachment_foot_r"]
+[node name="SpriteRigSprite_foot_r" type="Sprite3D" parent="SpriteRigSkeleton/SpriteRigAttachment_foot_r" unique_id=541936373]
+sorting_offset = 0.004
 pixel_size = 0.0028
 billboard = 1
-texture = ExtResource("19_foot_r_default")
+render_priority = 4
+texture = ExtResource("19_13xgu")
+metadata/draw_order = 4
+metadata/direction_key = "yaw_000_pitch_45"
+metadata/texture_resource_path = "res://assets/characters/sprite_rigs/default_humanoid/foot_r/yaw_000_pitch_45.png"
