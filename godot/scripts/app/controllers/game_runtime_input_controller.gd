@@ -26,7 +26,6 @@ var attack_target_outline: MeshInstance3D
 var attack_range_markers: Node3D
 var skill_target_preview_markers: Node3D
 var move_path_preview_markers: Node3D
-var pending_movement_path_markers: Node3D
 var selected_node: Node
 var hover_refresh_requested := false
 var last_selection_clear_result: Dictionary = {}
@@ -44,7 +43,6 @@ func _init(p_game_root: Node) -> void:
 	attack_range_markers = runtime_marker_controller.get("attack_range_markers") as Node3D
 	skill_target_preview_markers = runtime_marker_controller.get("skill_target_preview_markers") as Node3D
 	move_path_preview_markers = runtime_marker_controller.get("move_path_preview_markers") as Node3D
-	pending_movement_path_markers = runtime_marker_controller.get("pending_movement_path_markers") as Node3D
 
 
 func attach_world(p_world_container: Node3D, p_world_result: Dictionary) -> void:
@@ -60,7 +58,6 @@ func attach_world(p_world_container: Node3D, p_world_result: Dictionary) -> void
 	runtime_marker_controller.reset_for_world()
 	_clear_selection_only()
 	_set_hover_failure("world_changed")
-	_update_pending_movement_path_markers()
 	_request_hover_refresh()
 	selected_node = null
 
@@ -75,7 +72,6 @@ func process(delta: float) -> void:
 		hover_refresh_requested = false
 		update_hover_at_screen_position(game_root.get_viewport().get_mouse_position())
 	_sync_move_path_preview_with_active_movement()
-	_update_pending_movement_path_markers()
 
 
 func input(event: InputEvent) -> void:
@@ -496,7 +492,6 @@ func clear_selection_state(reason: String = "cleared") -> Dictionary:
 	var result := _clear_selection_only(reason)
 	_clear_skill_target_preview_markers()
 	_clear_move_path_preview_markers()
-	_update_pending_movement_path_markers()
 	return result
 
 
@@ -851,15 +846,6 @@ func _active_turn_runner_move_snapshot() -> Dictionary:
 	}
 
 
-func _update_pending_movement_path_markers() -> void:
-	var pending: Dictionary = _pending_movement_snapshot()
-	runtime_marker_controller.update_pending_movement_path_markers(pending, _observed_level())
-
-
-func _clear_pending_movement_path_markers() -> void:
-	runtime_marker_controller.clear_pending_movement_path_markers()
-
-
 func _player_actor_id() -> int:
 	if cached_player_actor_id > 0:
 		return cached_player_actor_id
@@ -880,14 +866,6 @@ func _player_actor_id_from_world_result() -> int:
 		if str(actor_data.get("kind", "")) == "player":
 			return int(actor_data.get("actor_id", 0))
 	return 0
-
-
-func _pending_movement_snapshot() -> Dictionary:
-	var simulation: Variant = game_root.get("simulation") if game_root != null else null
-	if simulation == null:
-		return {}
-	var pending: Dictionary = _dictionary_or_empty(simulation.get("pending_movement"))
-	return pending.duplicate(true)
 
 
 func _runtime_snapshot() -> Dictionary:
